@@ -81,3 +81,12 @@ void main()
 {
   show_menu();
 }
+
+static  void	Bye()
+{
+	To_exit = 1;
+	printf("\nBye.\n");
+	SP_disconnect( Mbox );
+	exit( 0 );
+}
+
