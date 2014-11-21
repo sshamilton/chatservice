@@ -33,57 +33,60 @@ Our goal is to develop a distributed chat server client system that is fault tol
 }
 \maketitle
 \section{Introduction}
-\IEEEPARstart{T}{his} system will be composed of a client and a server.  Servers will communicate through spread and utilize multicast with agreed ordering.  There will be 5 servers that will communicate with each other and maintain a total order for all chat rooms.  Clients can connect to any of the five servers, login, and create chat rooms, like already seen messages, change names, and leave chat rooms.  The system will be fault tolerant in that each server can go down, and the system will continue to work as long as 3 or more servers are running.  A server can leave the network and come back, and as long as a majority is present, the service will continue to work.
+\IEEEPARstart{T}{his} system will be composed of a client and a server.  Servers will communicate through spread and utilize multicast with agreed ordering.  
 \section{Design}
 \subsection{Assumptions}
 Below are our assumptions.
 \begin{itemize}
-\item A chat client can go offline or crash, but will not produce malicious code and/or messaging that can cause the spread daemon to work incorrectly (i.e. spoof partitioning/join messaging).
+\item A user is uniquely identified by their screen name.
+\item 
 \end{itemize}
 \subsection{Chat Message Packet}
 \begin{lstlisting}
 // Structure of chat packet.
 int type;//Type of packet 0 for message, 1 for like
-int sequence;//Global ordering of message
+int sequence; //Sequence of message given to the server
+int server_id; //Server id that the message was created on.
 char name[25]; //Text name of user
 char group[25]; //Text name of chat room
 char text[80]; //Text of chat message
-int like_sequence; //Integer of sequence number of message liked
+int like_sequence; //Integer of sequence number of message liked\
+int resend; //Set to 1 if the message is a resend for other servers
 \end{lstlisting}
-The message packet is utilized for both chat messages and "like" messages created by a user.  The message packet will be saved to disk when received from spread, and the sequence number will be assigned upon receiving it from spread (it is null initially).
+The message packet is utilized for both chat messages and likes created by a user.  The message packet will be saved to disk when received from spread, and the sequence number will be assigned upon receiving it from spread (it is null initially).
 
 \subsection{Server State Machine}
 \begin{center}
 \begin{tikzpicture}[scale=0.2]
 \tikzstyle{every node}+=[inner sep=0pt]
-\draw [black] (3.3,-3.2) circle (3);
-\draw (3.3,-3.2) node {$Init$};
-\draw [black] (3.3,-12.3) circle (3);
-\draw (3.3,-12.3) node {$Load$};
-\draw [black] (15.5,-12.3) circle (3);
-\draw (15.5,-12.3) node {$Run$};
-\draw [black] (15.5,-24.9) circle (3);
-\draw (15.5,-24.9) node {$Synch$};
-\draw [black] (3.3,-6.2) -- (3.3,-9.3);
-\fill [black] (3.3,-9.3) -- (3.8,-8.5) -- (2.8,-8.5);
-\draw [black] (6.3,-12.3) -- (12.5,-12.3);
-\fill [black] (12.5,-12.3) -- (11.7,-11.8) -- (11.7,-12.8);
-\draw [black] (15.5,-15.3) -- (15.5,-21.9);
-\fill [black] (15.5,-21.9) -- (16,-21.1) -- (15,-21.1);
-\draw (16,-18.6) node [right] {$Memb\mbox{ }Change$};
-\draw [black] (15.5,-21.9) -- (15.5,-15.3);
-\fill [black] (15.5,-15.3) -- (15,-16.1) -- (16,-16.1);
-\draw [black] (13.1,-10.51) -- (5.7,-4.99);
-\fill [black] (5.7,-4.99) -- (6.05,-5.87) -- (6.64,-5.07);
-\draw (12.24,-7.25) node [above] {$Crash$};
+\draw [black] (3.3,-3.5) circle (3);
+\draw (3.3,-3.5) node {$Init$};
+\draw [black] (19.9,-3.5) circle (3);
+\draw (19.9,-3.5) node {$Load$};
+\draw [black] (19.9,-16.4) circle (3);
+\draw (19.9,-16.4) node {$Synch$};
+\draw [black] (3.3,-16.4) circle (3);
+\draw (3.3,-16.4) node {$Run$};
+\draw [black] (19.9,-30.5) circle (3);
+\draw (19.9,-30.5) node {$Write$};
+\draw [black] (6.3,-3.5) -- (16.9,-3.5);
+\fill [black] (16.9,-3.5) -- (16.1,-3) -- (16.1,-4);
+\draw [black] (19.9,-6.5) -- (19.9,-13.4);
+\fill [black] (19.9,-13.4) -- (20.4,-12.6) -- (19.4,-12.6);
+\draw [black] (3.3,-13.4) -- (3.3,-6.5);
+\fill [black] (3.3,-6.5) -- (2.8,-7.3) -- (3.8,-7.3);
+\draw (3.8,-9.95) node [right] {$Crash$};
+\draw [black] (16.9,-16.4) -- (6.3,-16.4);
+\fill [black] (6.3,-16.4) -- (7.1,-16.9) -- (7.1,-15.9);
+\draw [black] (5.59,-18.34) -- (17.61,-28.56);
+\fill [black] (17.61,-28.56) -- (17.33,-27.66) -- (16.68,-28.42);
+\draw (5.54,-23.94) node [below] {$Memb\mbox{ }Chg$};
+\draw [black] (19.9,-27.5) -- (19.9,-19.4);
+\fill [black] (19.9,-19.4) -- (19.4,-20.2) -- (20.4,-20.2);
 \end{tikzpicture}
 \end{center}
-
 \subsection{Data Structure}
-We intend to use a vector that contains each machine id and the number of messages received from each machine.  This will be used at each machine to let other machines know what messages they have received so far.
-We also will have an array for all the chat messages that will contain the message packet struct.
-\subsection{Design Details}
-Each server will maintain the above data structure.  Upon a membership change, servers will 
-\\
-Upon any membership change, all servers write all messages received to disk at that point.  
+We will utilize a linked list to store the chat messages.  This will give us the ability to store a dyanmic amount of messages, and discard them once all servers are synced.  There will be one array containing an index for each machine, and will have the linked list containing the messages which are stored in the struct defined by our chat message packet.
+\subsection{Design}
+We plan to have each server save every message it receives from a client to disk.  We will also have a file that contains messages from all servers that will be written every time there is a membership change.  Sequence numbers will be assigned to each message when it is received from Spread, and a client will not see their message until the server that put it into spread received the message and has a sequence number assigned to it.  Servers will continue to run during a partition.  When a partition merges, the partition that contained the lowest numbered server will have priority to send.  Each server will send its vector containing the highest number sequence from each server.  Each server will resend the messages from the lowest heard sequence for their server.  The ordering will be maintained by the sequence number, and further ordering will be by process id to make all servers consistent.  When these messages are sent, the resend flag is set so that these message do not get re-ordered, and then they are just added to the linked list for each server.\\
 \end{document}
