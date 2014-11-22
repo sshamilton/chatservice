@@ -1,3 +1,4 @@
 chat_server
 chat_client
 *.o
+*.swp

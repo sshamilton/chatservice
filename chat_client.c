@@ -1,13 +1,5 @@
-#include "sp.h"
-
-#include <sys/types.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#define MAX_MESSLEN     102400
-#define MAX_VSSETS      10
-#define MAX_MEMBERS     100
-#define int32u unsigned int
+#include "net_include.h"
+/* Global variables */
 static  char    User[80];
 static  char    Spread_name[80];
 static  char    Private_group[MAX_GROUP_NAME];
@@ -16,7 +8,7 @@ static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
 static  void    Bye();
-
+static  int     connected = 0;
 
 
 void show_menu()
@@ -71,14 +63,33 @@ static	void	User_command()
 				printf(" invalid chatroom \n");
 				break;
 			}
-			ret = SP_join( Mbox, group );
-			if( ret < 0 ) SP_error( ret );
-
+			if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
+ 		        {
+			     	printf("Chatrooms cannot be 1-5.  These are reserved\n");
+			}
+ 		 	else {
+				ret = SP_join( Mbox, group );
+				if( ret < 0 ) SP_error( ret );
+			}
 			break;
+                case 'c':
+                        ret = sscanf( &command[2], "%s", group );
+                        if( ret < 1 )
+                        {
+                                printf(" invalid server \n");
+                                break;
+                        }
+                        ret = SP_join( Mbox, group );
+                        if( ret < 0 ) { SP_error( ret );} else { connected=1;};
+
+                        break;
     }
 }
 void main()
 {
+  E_init();
+  //ret = SP_join(Mbox, group); printf("Join group %s:%d\n", group, ret);
+
   show_menu();
 }
 
