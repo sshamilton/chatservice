@@ -60,7 +60,7 @@ extern "C" {
 
 /* Interface */
 
-#define		DEFAULT_SPREAD_PORT	4803
+#define		DEFAULT_SPREAD_PORT	10080
 
 #define         SPREAD_VERSION          ( (4 << 24) | ( 4 << 16) | 0 )
 

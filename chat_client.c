@@ -85,6 +85,10 @@ static	void	User_command()
                         if( ret < 0 ) { SP_error( ret );} else { connected=1;};
 
                         break;
+  		case 'q':
+			Bye();
+			exit(0);
+			break;
     }
 }
 static  void    Read_message()
