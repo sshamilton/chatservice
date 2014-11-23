@@ -209,7 +209,20 @@ if     ( Is_reg_memb_mess( service_type ) )
 
 void main()
 {
+  int ret;
   E_init();
+  sp_time test_timeout;
+  test_timeout.sec = 5;
+  test_timeout.usec = 0;
+  strncpy(Spread_name, "10080", 5);
+  ret = SP_connect_timeout( Spread_name, User, 0, 1, &Mbox, Private_group, test_timeout );
+        if( ret != ACCEPT_SESSION ) 
+        {
+                SP_error( ret );
+                Bye();
+        }
+        printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
+
   //ret = SP_join(Mbox, group); printf("Join group %s:%d\n", group, ret);
   E_attach_fd( 0, READ_FD, User_command, 0, NULL, LOW_PRIORITY );
   E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );

@@ -14,6 +14,14 @@ void recv_update();
 void recv_client_msg();
 void write_data();
 void memb_change();
+
+static void Bye() {
+	To_exit = 1;
+	printf("\nBye.\n");
+	SP_disconnect( Mbox );
+	exit( 0 );
+}
+
 static void Read_message() 
 {
  static  char             mess[MAX_MESSLEN];
@@ -136,6 +144,10 @@ void main(int argc, char **argv)
   int ret;
   char group[80];
   char messages[5];
+  sp_time test_timeout;
+  test_timeout.sec = 5;
+  test_timeout.usec = 0;
+  strncpy(Spread_name, "10080", 5);
   if (argc != 2)
   { 
      printf("Usage: chat_server <server id (1-5)>\n");
@@ -144,6 +156,13 @@ void main(int argc, char **argv)
   server = atoi(argv[1]);
   printf("Chat Server %u running\n", server);
   E_init();
+  ret = SP_connect_timeout( Spread_name, User, 0, 1, &Mbox, Private_group, test_timeout );
+        if( ret != ACCEPT_SESSION ) 
+        {
+                SP_error( ret );
+                Bye();
+        }
+        printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
   ret = SP_join(Mbox, argv[1]); 
   printf("Join group %d return:%d\n", server, ret);
   if (ret < 0) SP_error( ret );
