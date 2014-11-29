@@ -1,12 +1,15 @@
 #include "net_include.h"
 /* global variables */
-static  char    User[80];
+static  char    User[MAX_PRIVATE_NAME];
 static  char    Spread_name[80];
 static  char    Private_group[MAX_GROUP_NAME];
 static  mailbox Mbox;
 static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
+static  struct node     Server_packets[5];
+static  FILE    *fd;
+
 
 void read_disk();
 void send_vector();
@@ -14,6 +17,51 @@ void recv_update();
 void recv_client_msg();
 void write_data();
 void memb_change();
+
+
+/*
+ * Read disk is used for recovering from crashes. Things to do:
+ * 1. Restore data structure and recover data for users connected to the
+ * server.
+ * 2. Restore the vector.
+ */
+void read_disk() {
+  
+}
+
+void send_vector() {
+
+}
+
+void recv_update() {
+
+}
+
+void recv_client_msg() {
+
+}
+
+/*
+ * Currently write_data only writes the packets (not the nodes) to disk.
+ * This is because writing the entire nodes is meaningless because the
+ * "next" and "data" pointers will become useless (?).
+ */
+void write_data() {
+  int i;
+  struct node temp;
+  // Iterate through each server linked list and write the data to fd.
+  for (i = 0; i < 5; i++) {
+    temp = Server_packets[i];
+    while (temp.next != NULL) {
+      temp = temp.next;
+      fwrite(temp.data, sizeof(chat_packet), 1, fd);
+    }
+  }
+}
+
+void memb_change() {
+
+}
 
 static void Bye() {
 	To_exit = 1;
@@ -24,7 +72,7 @@ static void Bye() {
 
 static void Read_message() 
 {
- static  char             mess[MAX_MESSLEN];
+static  char             mess[MAX_MESSLEN];
         char             sender[MAX_GROUP_NAME];
         char             target_groups[MAX_MEMBERS][MAX_GROUP_NAME];
         membership_info  memb_info;
@@ -140,6 +188,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 
 void main(int argc, char **argv) 
 {
+  int i;
   int server;
   int ret;
   char group[80];
@@ -150,23 +199,44 @@ void main(int argc, char **argv)
   strncpy(Spread_name, "10080", 5);
   if (argc != 2)
   { 
-     printf("Usage: chat_server <server id (1-5)>\n");
-     exit (0);
+    printf("Usage: chat_server <server id (1-5)>\n");
+    exit (0);
   }
   server = atoi(argv[1]);
   printf("Chat Server %u running\n", server);
   E_init();
   ret = SP_connect_timeout( Spread_name, User, 0, 1, &Mbox, Private_group, test_timeout );
-        if( ret != ACCEPT_SESSION ) 
-        {
-                SP_error( ret );
-                Bye();
-        }
-        printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
+  if( ret != ACCEPT_SESSION ) {
+    SP_error( ret );
+    Bye();
+  }
+  printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
   ret = SP_join(Mbox, argv[1]); 
   printf("Join group %d return:%d\n", server, ret);
-  if (ret < 0) SP_error( ret );
+  if (ret != 0) SP_error( ret );
   E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
+
+  // For clearing the data structure before use.
+  for (i = 0; i < 5; i++) {
+    Server_packets[i].data = NULL;
+    Server_packets[i].next = NULL;
+  }
+
+  /*
+   * File setup. Note that the files will just be named after the server
+   * to which the file belongs. First tries to open an existing file to
+   * read from and write to. If file does not exist, creates a new file for
+   * writing
+   *
+   * Future updates: create a more useful file name.
+   */
+  if ((fp = fopen(argv[1], "r+")) == NULL) {
+    fp = fopen(argv[1], "w");
+  } else {
+    // If the file already exists, read to recover data lost from a crash.
+    read_disk();
+  }
+
   for (;;)
   {
    ret =0;

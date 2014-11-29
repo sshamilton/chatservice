@@ -27,3 +27,12 @@ struct chat_packet {
   int resend;
 };
 
+
+/*
+ *  These are the nodes used in data structure that holds the packets of
+ *  all servers.
+ */
+struct node {
+  struct chat_packet* data;
+  struct node* next;
+};
