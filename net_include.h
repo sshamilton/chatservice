@@ -27,6 +27,11 @@ struct chat_packet {
   int resend;
 };
 
+struct vector {
+  int vector[5][5];
+};
+
+
 /*
  *  These are the nodes used in data structure that holds the packets of
  *  all servers.

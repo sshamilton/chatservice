@@ -4,6 +4,7 @@ static  char    User[MAX_PRIVATE_NAME];
 static  char    Spread_name[80];
 static  char    Private_group[MAX_GROUP_NAME];
 static  mailbox Mbox;
+static  struct vector*   Vector[5][5]; 
 static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
@@ -62,7 +63,10 @@ void read_disk(FILE *fp) {
  
 /*void send_vector() {
         int ret;
-        if (SP_multicast(Mbox, AGREED_MESS, "Servers", 0, 
+        // Send the vector multicasted to the server group.
+        if (SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct vector), (const char *) Vector) < 0) {
+                printf
+        }
 }*/
 
 void recv_update() {
@@ -222,6 +226,7 @@ void main(int argc, char **argv)
   char group[80];
   char messages[5];
   FILE *fp;
+  struct node first_node; // Sentinel node used for read_disk()
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;
@@ -259,6 +264,7 @@ void main(int argc, char **argv)
   }
 
   // Last_written starts out as a sentinel node.
+  Last_written = &first_node;
   Last_written->data = NULL;
   Last_written->next = NULL;
 
