@@ -8,7 +8,10 @@ static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
 static  struct node     Server_packets[5];
-static  FILE    *fd;
+static  FILE*   fd;
+// Pointer to last node that has been written to disk
+static  struct node*    last_written;
+
 
 
 void read_disk();
@@ -26,9 +29,31 @@ void memb_change();
  * 2. Restore the vector.
  */
 void read_disk() {
-  
-}
+  int                 i = 0;
+  struct chat_packet* c_temp;
+  struct node*        n_temp[5];
 
+  // Needs to be fixed!
+  while (fread(c_temp, sizeof struct chat_packet, 1, fp) != 0) {
+    // Change to new array.
+    if ((c_temp->server_id - 1) != i) {
+      i = c_temp->server_id - 1;
+      n_temp = &Server_packets[i];
+    }
+
+    // Allocate memory for the next node.
+    n_temp->next = (struct node *) malloc(sizeof struct node);
+    // Update the n_temp pointer to new tail node.
+    n_temp = n_temp->next;
+    // Allocate memory for the new node's data.
+    n_temp->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+    // memcpy the read data into the newly allocated memory for the next node.
+    memcpy(n_temp->data, c_temp, sizeof struct chat_packet);
+    // Clear the new node's next pointer for safety.
+    n_temp->next = NULL;
+  }
+}
+ 
 void send_vector() {
 
 }
@@ -47,16 +72,28 @@ void recv_client_msg() {
  * "next" and "data" pointers will become useless (?).
  */
 void write_data() {
+  // Iterate starting from the most recently written to disk and then write from that
+  // point on following the "next_seq" pointers
+
+  while (last_written->next != NULL) {
+    last_written = last_written->next;
+    fwrite(last_written->data, sizeof chat_packet, 1, fd);
+  }
+
+  // Not what we want I think:
+  /* Iterate through each server linked list and write the data to fd. Not sure if this is
+   exactly what we want -- maybe need some input parameters to tell us from what point
+   to start writing to the disk.
+
   int i;
-  struct node temp;
-  // Iterate through each server linked list and write the data to fd.
+  struct node* temp;
   for (i = 0; i < 5; i++) {
     temp = Server_packets[i];
     while (temp.next != NULL) {
       temp = temp.next;
       fwrite(temp.data, sizeof(chat_packet), 1, fd);
     }
-  }
+  }*/
 }
 
 void memb_change() {

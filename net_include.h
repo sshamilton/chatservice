@@ -34,5 +34,6 @@ struct chat_packet {
  */
 struct node {
   struct chat_packet* data;
-  struct node* next;
+  struct node*        next;
+  struct node*        seq_next;
 };
