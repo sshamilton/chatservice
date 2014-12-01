@@ -16,11 +16,11 @@ static  struct node*    Last_written;
 
 
 
-void read_disk();
+void read_disk(FILE *fp);
 void send_vector();
 void recv_update();
 void recv_client_msg();
-void write_data();
+void write_data(FILE *fp);
 void memb_change();
 
 
@@ -30,11 +30,11 @@ void memb_change();
  * server.
  * 2. Restore the vector.
  */
-void read_disk() {
+void read_disk(FILE *fp) {
   int                 i;
   struct chat_packet* c_temp;
 
-  while (fread(c_temp, sizeof struct chat_packet, 1, fp) != 0) {
+  while (fread(c_temp, sizeof struct chat_packet, 1, fd) != 0) {
     i = c_temp->server_id;
 
     // Allocate memory for the next node.
@@ -77,13 +77,13 @@ void recv_client_msg() {
  * This is because writing the entire nodes is meaningless because the
  * "next" and "data" pointers will become useless (?).
  */
-void write_data() {
+void write_data(FILE* fp) {
   // Iterate starting from the most recently written to disk and then write from that
   // point on following the "next_seq" pointers
 
   while (Last_written->next != NULL) {
     Last_written = Last_written->next;
-    fwrite(last_written->data, sizeof chat_packet, 1, fd);
+    fwrite(last_written->data, sizeof struct chat_packet, 1, fp);
   }
 
   // Not what we want I think:
@@ -236,6 +236,7 @@ void main(int argc, char **argv)
   int ret;
   char group[80];
   char messages[5];
+  FILE *fp;
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;
@@ -283,7 +284,7 @@ void main(int argc, char **argv)
     fp = fopen(argv[1], "w");
   } else {
     // If the file already exists, read to recover data lost from a crash.
-    read_disk();
+    read_disk(fp);
   }
 
   for (;;)
