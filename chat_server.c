@@ -34,20 +34,20 @@ void read_disk(FILE *fp) {
   int                 i;
   struct chat_packet* c_temp;
 
-  while (fread(c_temp, sizeof struct chat_packet, 1, fd) != 0) {
+  while (fread(c_temp, sizeof(struct chat_packet), 1, fd) != 0) {
     i = c_temp->server_id;
 
     // Allocate memory for the next node.
-    Last_packets[i]->next = (struct node *) malloc(sizeof struct node);
+    Last_packets[i]->next = (struct node *) malloc(sizeof(struct node));
 
     // Update the n_temp pointer to new tail node.
     Last_packets[i] = Last_packets[i]->next;
 
     // Allocate memory for the new node's data.
-    Last_packets[i]->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+    Last_packets[i]->data = (struct chat_packet *) malloc(sizeof(struct chat_packet));
 
     // memcpy the read data into the newly allocated memory for the next node.
-    memcpy(Last_packets[i]>data, c_temp, sizeof struct chat_packet);
+    memcpy(Last_packets[i]->data, c_temp, sizeof(struct chat_packet));
 
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
@@ -56,13 +56,14 @@ void read_disk(FILE *fp) {
     Last_written->next_seq = Last_packets[i];
 
     // Update the Last_written to the newly created node.
-    Last_written = Last_packets[i]
+    Last_written = Last_packets[i];
   }
 }
  
-void send_vector() {
-
-}
+/*void send_vector() {
+        int ret;
+        if (SP_multicast(Mbox, AGREED_MESS, "Servers", 0, 
+}*/
 
 void recv_update() {
 
@@ -78,28 +79,10 @@ void recv_client_msg() {
  * "next" and "data" pointers will become useless (?).
  */
 void write_data(FILE* fp) {
-  // Iterate starting from the most recently written to disk and then write from that
-  // point on following the "next_seq" pointers
-
   while (Last_written->next != NULL) {
     Last_written = Last_written->next;
-    fwrite(last_written->data, sizeof struct chat_packet, 1, fp);
+    fwrite(Last_written->data, sizeof(struct chat_packet), 1, fp);
   }
-
-  // Not what we want I think:
-  /* Iterate through each server linked list and write the data to fd. Not sure if this is
-   exactly what we want -- maybe need some input parameters to tell us from what point
-   to start writing to the disk.
-
-  int i;
-  struct node* temp;
-  for (i = 0; i < 5; i++) {
-    temp = Server_packets[i];
-    while (temp.next != NULL) {
-      temp = temp.next;
-      fwrite(temp.data, sizeof(chat_packet), 1, fd);
-    }
-  }*/
 }
 
 void memb_change() {
@@ -184,6 +167,8 @@ if     ( Is_reg_memb_mess( service_type ) )
                         if( Is_caused_join_mess( service_type ) )
                         {
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
+                                // Deal with join of new member by joining the member's
+                                // private 
                         }else if( Is_caused_leave_mess( service_type ) ){
                                 printf("Due to the LEAVE of %s\n", memb_info.changed_member );
                         }else if( Is_caused_disconnect_mess( service_type ) ){
@@ -254,8 +239,13 @@ void main(int argc, char **argv)
     SP_error( ret );
     Bye();
   }
-  printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
+  printf("Server connected to %s with private group %s\n", Spread_name, Private_group );
   ret = SP_join(Mbox, argv[1]); 
+  printf("Join group %d return:%d\n", server, ret);
+  if (ret != 0) SP_error( ret );
+  E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
+
+  ret = SP_join(Mbox, "Servers"); 
   printf("Join group %d return:%d\n", server, ret);
   if (ret != 0) SP_error( ret );
   E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
