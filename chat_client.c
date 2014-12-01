@@ -41,7 +41,7 @@ int ret;
 struct chat_packet *c;
 	if (strlen(chatroom) > 1) 
 	{
-		c->type = 0;
+		c->type = 0;//Chat message type
 		strncpy(c->text, mtext, strlen(mtext));
   		c->server_id = connected;
 		strncpy(c->name, username, strlen(username));
@@ -67,7 +67,7 @@ void like_msg(int like)
 	struct chat_packet *c;
         if (strlen(chatroom) > 1)
         {
-                c->type = 1;
+                c->type = 1;//Chat like type
                 c->server_id = connected;
                 strncpy(c->name, username, strlen(username));
                 strncpy(c->group, chatroom, strlen(chatroom));
@@ -86,10 +86,72 @@ void like_msg(int like)
                 printf("Sorry, you must join a chat room to like a message.\n");
         }
 }
-void join_server();
+void join_server(int server_id)
+{
+	int ret;
+	struct chat_packet *c;
+	struct chat_packet *r;
+	char             mess[MAX_MESSLEN];
+        char             sender[MAX_GROUP_NAME];
+        char             target_groups[MAX_MEMBERS][MAX_GROUP_NAME];
+        membership_info  memb_info;
+        vs_set_info      vssets[MAX_VSSETS];
+        unsigned int     my_vsset_index;
+        int              num_vs_sets;
+        char             members[MAX_MEMBERS][MAX_GROUP_NAME];
+        int              num_groups;
+        int              service_type;
+        int16            mess_type;
+        int              endian_mismatch;
+	char		group[80];
+	c->type = 2;//Request to join server
+        strncpy(c->text, Private_group, strlen(Private_group));
+        c->server_id = server_id;
+        /* Send Message */
+	sprintf(group, "%d", server_id);
+        ret = SP_multicast(Mbox, AGREED_MESS, group, 2, sizeof(struct chat_packet), (char *)c);
+        if( ret < 0 )
+        {
+                SP_error( ret );
+        }
+ 	/* Poll our inbox to see if the server responded */
+	ret = SP_poll(Mbox);
+	if ( ret > 0)
+	{
+		ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups,
+                &mess_type, &endian_mismatch, sizeof(mess), mess );
+		memcpy(r, mess, sizeof(mess));
+		if (r->type == 4) /*Received membership message from our private group */
+		{
+			printf("Successfully connected to server %d\n", server_id);
+		}
+		else 
+		{
+			printf("Failed to connect to server (no timeout set yet!)\n");
+		}
+	}
+
+}
 void join_room();
 void print_history();
-void show_servers();
+void show_servers()
+{
+	int ret;
+        struct chat_packet *c;
+        c->type = 1;//Chat like type
+        c->server_id = connected;
+        strncpy(c->name, username, strlen(username));
+        strncpy(c->group, chatroom, strlen(chatroom));
+        c->sequence = 0; //Server updates this
+        c->like_sequence = 0; //Need to calculate this***************
+        c->resend = 0; //Not sure we need this anymore
+        /* Send Message */
+        ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
+        if( ret < 0 )
+        {
+                SP_error( ret );
+        }
+}
 static	void	User_command()
 {
 	char	command[130];
@@ -126,14 +188,13 @@ static	void	User_command()
 			}
 			break;
                 case 'c':
-                        ret = sscanf( &command[2], "%s", group );
+			ret = sscanf( &command[2], "%s", group );
                         if( ret < 1 )
                         {
-                                printf(" invalid server \n>");
+                                printf(" invalid server id \n>");
                                 break;
                         }
-                        ret = SP_join( Mbox, group );
-                        if( ret < 0 ) { SP_error( ret );} else { connected=1;};
+		  	join_server(group);
 
                         break;
   		case 'q':
@@ -172,6 +233,8 @@ static	void	User_command()
                                 break;
                         }
                         like_msg(like);
+		case 'v':
+			show_servers();
 		default: 
 			printf(">");
 			break;
@@ -307,7 +370,7 @@ void main()
                 SP_error( ret );
                 Bye();
         }
-        printf("Serer connected to %s with private group %s\n", Spread_name, Private_group );
+        printf("Connected to %s with private group %s\n", Spread_name, Private_group );
 
   //ret = SP_join(Mbox, group); printf("Join group %s:%d\n", group, ret);
   E_attach_fd( 0, READ_FD, User_command, 0, NULL, LOW_PRIORITY );
