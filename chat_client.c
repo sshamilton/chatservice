@@ -10,7 +10,8 @@ static  unsigned int    Previous_len;
 static  int     To_exit = 0;
 static  void    Bye();
 static  int     connected = 0;
-
+static  char    username[20];
+static  char    chatroom[MAX_GROUP_NAME] ="\0";
 
 void show_menu()
 {
@@ -34,16 +35,65 @@ void show_menu()
 	fflush(stdout);
 }
 
-void send_msg();
-void update_like();
+void send_msg(char *mtext)
+{
+int ret;
+struct chat_packet *c;
+	if (strlen(chatroom) > 1) 
+	{
+		c->type = 0;
+		strncpy(c->text, mtext, strlen(mtext));
+  		c->server_id = connected;
+		strncpy(c->name, username, strlen(username));
+		strncpy(c->group, chatroom, strlen(chatroom));
+		c->sequence = 0; //Server updates this
+		c->like_sequence = 0; //Unused on text message
+		c->resend = 0; //Not sure we need this anymore
+		/* Send Message */
+		ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *)c);
+		if( ret < 0 )
+                {
+                	SP_error( ret );
+                }
+	}
+	else 
+	{
+		printf("Sorry, you must join a chat room to send a message.\n");
+	}
+}
+void like_msg(int like)
+{
+	int ret;
+	struct chat_packet *c;
+        if (strlen(chatroom) > 1)
+        {
+                c->type = 1;
+                c->server_id = connected;
+                strncpy(c->name, username, strlen(username));
+                strncpy(c->group, chatroom, strlen(chatroom));
+                c->sequence = 0; //Server updates this
+                c->like_sequence = 0; //Need to calculate this***************
+                c->resend = 0; //Not sure we need this anymore
+                /* Send Message */
+                ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
+                if( ret < 0 )
+                {
+                        SP_error( ret );
+                }
+        }
+        else
+        {
+                printf("Sorry, you must join a chat room to like a message.\n");
+        }
+}
 void join_server();
-void set_username();
 void join_room();
 void print_history();
 void show_servers();
 static	void	User_command()
 {
 	char	command[130];
+	char	mtext[80];
 	char	mess[MAX_MESSLEN];
 	char	group[80];
 	char	groups[10][MAX_GROUP_NAME];
@@ -51,6 +101,7 @@ static	void	User_command()
 	unsigned int	mess_len;
 	int	ret;
 	int	i;
+	int 	like;
 
 	for( i=0; i < sizeof(command); i++ ) command[i] = 0;
 	if( fgets( command, 130, stdin ) == NULL ) 
@@ -62,12 +113,12 @@ static	void	User_command()
 			ret = sscanf( &command[2], "%s", group );
 			if( ret < 1 ) 
 			{
-				printf(" invalid chatroom \n");
+				printf(" invalid chatroom \n>");
 				break;
 			}
 			if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
  		        {
-			     	printf("Chatrooms cannot be 1-5.  These are reserved\n");
+			     	printf("Chatrooms cannot be 1-5.  These are reserved\n>");
 			}
  		 	else {
 				ret = SP_join( Mbox, group );
@@ -78,7 +129,7 @@ static	void	User_command()
                         ret = sscanf( &command[2], "%s", group );
                         if( ret < 1 )
                         {
-                                printf(" invalid server \n");
+                                printf(" invalid server \n>");
                                 break;
                         }
                         ret = SP_join( Mbox, group );
@@ -88,6 +139,41 @@ static	void	User_command()
   		case 'q':
 			Bye();
 			exit(0);
+			break;
+  		case '?':
+			show_menu();
+			break;
+   		case 'u':
+			ret = sscanf( &command[2], "%s", username);
+			if( ret < 1 )
+			{
+				printf(" Invalid Username\n>");
+				break;
+			}
+			else
+			{
+				printf("Username set to %s\n>", username);
+			}
+			break;
+ 		case 'a':
+			ret = sscanf( &command[2], "%s", mtext );
+			if( ret < 1)
+			{
+				printf(" invalid message\n>");
+				break;
+			}
+			send_msg(mtext);
+			break;
+		case 'l':
+			ret = sscanf( &command[2], "%d", like  );
+                        if( ret < 1)
+                        {
+                                printf(" invalid line\n>");
+                                break;
+                        }
+                        like_msg(like);
+		default: 
+			printf(">");
 			break;
     }
 }
