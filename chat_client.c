@@ -86,7 +86,7 @@ void like_msg(int like)
                 printf("Sorry, you must join a chat room to like a message.\n");
         }
 }
-void join_server(int server_id)
+void join_server(char *server_id)
 {
 	int ret;
 	struct chat_packet *c;
@@ -100,16 +100,17 @@ void join_server(int server_id)
         int              num_vs_sets;
         char             members[MAX_MEMBERS][MAX_GROUP_NAME];
         int              num_groups;
-        int              service_type;
+        int              service_type=0;
         int16            mess_type;
         int              endian_mismatch;
 	char		group[80];
+	c = malloc(sizeof(struct chat_packet));
+	r = malloc(sizeof(struct chat_packet));
 	c->type = 2;//Request to join server
         strncpy(c->text, Private_group, strlen(Private_group));
-        c->server_id = server_id;
+        c->server_id = atoi(server_id);
         /* Send Message */
-	sprintf(group, "%d", server_id);
-        ret = SP_multicast(Mbox, AGREED_MESS, group, 2, sizeof(struct chat_packet), (char *)c);
+        ret = SP_multicast(Mbox, AGREED_MESS, server_id, 2, sizeof(struct chat_packet), (char *)c);
         if( ret < 0 )
         {
                 SP_error( ret );
@@ -123,13 +124,18 @@ void join_server(int server_id)
 		memcpy(r, mess, sizeof(mess));
 		if (r->type == 4) /*Received membership message from our private group */
 		{
-			printf("Successfully connected to server %d\n", server_id);
+			printf("Successfully connected to server %d\n>", server_id);
 		}
 		else 
 		{
-			printf("Failed to connect to server (no timeout set yet!)\n");
+			printf("Failed to connect to server (wrong message type)\n>");
 		}
 	}
+	else
+	{
+		printf("Failed to connect to server (no timeout set yet!)\n>");
+	}
+
 
 }
 void join_room();
@@ -138,7 +144,8 @@ void show_servers()
 {
 	int ret;
         struct chat_packet *c;
-        c->type = 1;//Chat like type
+        c = malloc(sizeof(struct chat_packet));
+	c->type = 1;//Chat like type
         c->server_id = connected;
         strncpy(c->name, username, strlen(username));
         strncpy(c->group, chatroom, strlen(chatroom));
@@ -195,7 +202,6 @@ static	void	User_command()
                                 break;
                         }
 		  	join_server(group);
-
                         break;
   		case 'q':
 			Bye();
@@ -233,8 +239,10 @@ static	void	User_command()
                                 break;
                         }
                         like_msg(like);
+			break;
 		case 'v':
 			show_servers();
+			break;
 		default: 
 			printf(">");
 			break;
