@@ -8,17 +8,19 @@ static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
 static  struct node     Server_packets[5];
+// Essentially the 5 tail nodes of the 5 linked lists.
+static  struct node*    Last_packets[5];
 static  FILE*   fd;
 // Pointer to last node that has been written to disk
-static  struct node*    last_written;
+static  struct node*    Last_written;
 
 
 
-void read_disk();
+void read_disk(FILE *fp);
 void send_vector();
 void recv_update();
 void recv_client_msg();
-void write_data();
+void write_data(FILE *fp);
 void memb_change();
 
 
@@ -29,28 +31,32 @@ void memb_change();
  * 2. Restore the vector.
  */
 void read_disk(FILE *fp) {
-  int                 i = 0;
+  int                 i;
   struct chat_packet* c_temp;
-  struct node*        n_temp[5];
 
-  // Needs to be fixed!
-  while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
-    // Change to new array.
-    if ((c_temp->server_id - 1) != i) {
-      i = c_temp->server_id - 1;
-      n_temp[i] = &Server_packets[i];
-    }
+  while (fread(c_temp, sizeof struct chat_packet, 1, fd) != 0) {
+    i = c_temp->server_id;
 
     // Allocate memory for the next node.
-    n_temp[i]->next = (struct node *) malloc(sizeof(struct node));
+    Last_packets[i]->next = (struct node *) malloc(sizeof struct node);
+
     // Update the n_temp pointer to new tail node.
-    n_temp[i] = n_temp[i]->next;
+    Last_packets[i] = Last_packets[i]->next;
+
     // Allocate memory for the new node's data.
-    n_temp[i]->data = (struct chat_packet *) malloc(sizeof(struct chat_packet));
+    Last_packets[i]->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+
     // memcpy the read data into the newly allocated memory for the next node.
-    memcpy(n_temp[i]->data, c_temp, sizeof(struct chat_packet));
+    memcpy(Last_packets[i]>data, c_temp, sizeof struct chat_packet);
+
     // Clear the new node's next pointer for safety.
-    n_temp[i]->next = NULL;
+    Last_packets[i]->next = NULL;
+
+    // Point the previous new node to the new new node.
+    Last_written->next_seq = Last_packets[i];
+
+    // Update the Last_written to the newly created node.
+    Last_written = Last_packets[i]
   }
 }
  
@@ -71,13 +77,13 @@ void recv_client_msg() {
  * This is because writing the entire nodes is meaningless because the
  * "next" and "data" pointers will become useless (?).
  */
-void write_data() {
+void write_data(FILE* fp) {
   // Iterate starting from the most recently written to disk and then write from that
   // point on following the "next_seq" pointers
 
-  while (last_written->next != NULL) {
-    last_written = last_written->next;
-    fwrite(last_written->data, sizeof(struct chat_packet), 1, fd);
+  while (Last_written->next != NULL) {
+    Last_written = Last_written->next;
+    fwrite(last_written->data, sizeof struct chat_packet, 1, fp);
   }
 
   // Not what we want I think:
@@ -258,7 +264,13 @@ void main(int argc, char **argv)
   for (i = 0; i < 5; i++) {
     Server_packets[i].data = NULL;
     Server_packets[i].next = NULL;
+    Server_packets[i].next_seq = NULL;
+    Last_packets[i] = &Server_packets[i];
   }
+
+  // Last_written starts out as a sentinel node.
+  Last_written->data = NULL;
+  Last_written->next = NULL;
 
   /*
    * File setup. Note that the files will just be named after the server
