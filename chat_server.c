@@ -28,29 +28,29 @@ void memb_change();
  * server.
  * 2. Restore the vector.
  */
-void read_disk() {
+void read_disk(FILE *fp) {
   int                 i = 0;
   struct chat_packet* c_temp;
   struct node*        n_temp[5];
 
   // Needs to be fixed!
-  while (fread(c_temp, sizeof struct chat_packet, 1, fp) != 0) {
+  while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
     // Change to new array.
     if ((c_temp->server_id - 1) != i) {
       i = c_temp->server_id - 1;
-      n_temp = &Server_packets[i];
+      n_temp[i] = &Server_packets[i];
     }
 
     // Allocate memory for the next node.
-    n_temp->next = (struct node *) malloc(sizeof struct node);
+    n_temp[i]->next = (struct node *) malloc(sizeof(struct node));
     // Update the n_temp pointer to new tail node.
-    n_temp = n_temp->next;
+    n_temp[i] = n_temp[i]->next;
     // Allocate memory for the new node's data.
-    n_temp->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+    n_temp[i]->data = (struct chat_packet *) malloc(sizeof(struct chat_packet));
     // memcpy the read data into the newly allocated memory for the next node.
-    memcpy(n_temp->data, c_temp, sizeof struct chat_packet);
+    memcpy(n_temp[i]->data, c_temp, sizeof(struct chat_packet));
     // Clear the new node's next pointer for safety.
-    n_temp->next = NULL;
+    n_temp[i]->next = NULL;
   }
 }
  
@@ -77,7 +77,7 @@ void write_data() {
 
   while (last_written->next != NULL) {
     last_written = last_written->next;
-    fwrite(last_written->data, sizeof chat_packet, 1, fd);
+    fwrite(last_written->data, sizeof(struct chat_packet), 1, fd);
   }
 
   // Not what we want I think:
@@ -230,6 +230,7 @@ void main(int argc, char **argv)
   int ret;
   char group[80];
   char messages[5];
+  FILE *fp;
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;
@@ -271,7 +272,7 @@ void main(int argc, char **argv)
     fp = fopen(argv[1], "w");
   } else {
     // If the file already exists, read to recover data lost from a crash.
-    read_disk();
+    read_disk(fp);
   }
 
   for (;;)
