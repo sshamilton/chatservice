@@ -8,9 +8,11 @@ static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
 static  struct node     Server_packets[5];
+// Essentially the 5 tail nodes of the 5 linked lists.
+static  struct node*    Last_packets[5];
 static  FILE*   fd;
 // Pointer to last node that has been written to disk
-static  struct node*    last_written;
+static  struct node*    Last_written;
 
 
 
@@ -29,28 +31,32 @@ void memb_change();
  * 2. Restore the vector.
  */
 void read_disk() {
-  int                 i = 0;
+  int                 i;
   struct chat_packet* c_temp;
-  struct node*        n_temp[5];
 
-  // Needs to be fixed!
   while (fread(c_temp, sizeof struct chat_packet, 1, fp) != 0) {
-    // Change to new array.
-    if ((c_temp->server_id - 1) != i) {
-      i = c_temp->server_id - 1;
-      n_temp = &Server_packets[i];
-    }
+    i = c_temp->server_id;
 
     // Allocate memory for the next node.
-    n_temp->next = (struct node *) malloc(sizeof struct node);
+    Last_packets[i]->next = (struct node *) malloc(sizeof struct node);
+
     // Update the n_temp pointer to new tail node.
-    n_temp = n_temp->next;
+    Last_packets[i] = Last_packets[i]->next;
+
     // Allocate memory for the new node's data.
-    n_temp->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+    Last_packets[i]->data = (struct chat_packet *) malloc(sizeof struct chat_packet);
+
     // memcpy the read data into the newly allocated memory for the next node.
-    memcpy(n_temp->data, c_temp, sizeof struct chat_packet);
+    memcpy(Last_packets[i]>data, c_temp, sizeof struct chat_packet);
+
     // Clear the new node's next pointer for safety.
-    n_temp->next = NULL;
+    Last_packets[i]->next = NULL;
+
+    // Point the previous new node to the new new node.
+    Last_written->next_seq = Last_packets[i];
+
+    // Update the Last_written to the newly created node.
+    Last_written = Last_packets[i]
   }
 }
  
@@ -75,8 +81,8 @@ void write_data() {
   // Iterate starting from the most recently written to disk and then write from that
   // point on following the "next_seq" pointers
 
-  while (last_written->next != NULL) {
-    last_written = last_written->next;
+  while (Last_written->next != NULL) {
+    Last_written = Last_written->next;
     fwrite(last_written->data, sizeof chat_packet, 1, fd);
   }
 
@@ -257,7 +263,13 @@ void main(int argc, char **argv)
   for (i = 0; i < 5; i++) {
     Server_packets[i].data = NULL;
     Server_packets[i].next = NULL;
+    Server_packets[i].next_seq = NULL;
+    Last_packets[i] = &Server_packets[i];
   }
+
+  // Last_written starts out as a sentinel node.
+  Last_written->data = NULL;
+  Last_written->next = NULL;
 
   /*
    * File setup. Note that the files will just be named after the server
