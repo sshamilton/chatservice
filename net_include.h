@@ -40,4 +40,5 @@ struct node {
   struct chat_packet* data;
   struct node*        next;
   struct node*        next_seq;
+  int    sequence; /*Client line sequence number */
 };

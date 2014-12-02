@@ -13,6 +13,9 @@ static  int     connected = 0;
 static  char    username[20];
 static  char    chatroom[MAX_GROUP_NAME] ="\0";
 static  int     line_number=0;
+static  struct  node* chatroom_start;
+static  struct  node* chatroom_latest;
+
 void show_menu()
 {
 	printf("\n");
@@ -41,7 +44,7 @@ int ret;
 struct chat_packet *c;
 char group[80];
 c = malloc(sizeof(struct chat_packet));
-	if (strlen(chatroom) > 1 && connected > 0) 
+	if (strlen(chatroom) > 1 && connected > 0 && strlen(username) >0) 
 	{
 	 printf("Sending %s to group %s\n", mtext, chatroom);	
 		c->type = 0;//Chat message type
@@ -65,6 +68,10 @@ c = malloc(sizeof(struct chat_packet));
 		if (strlen(chatroom) <= 1) {
 		printf("Sorry, you must join a chat room to send a message.\n");
 		}
+		else if (strlen(username) < 1) {
+		printf("Please set your username before sending a message.\n");
+ 		}
+
 		else {
 		printf("Please connect to a server before trying to send a message.\n");
 		}
@@ -125,11 +132,46 @@ void join_server(char *server_id)
                 SP_error( ret );
         }
 }
-void join_room()
+
+void join_room(char *group)
 {
-	
+  int ret;
+  if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
+  {
+    printf("Chatrooms cannot be 1-5.  These are reserved\n>");
+  }
+  else if (strlen(username) < 1)
+  {
+    printf("Please set your username before joining a chat room\n>");
+  }
+  else {
+    ret = SP_join( Mbox, group );
+    if( ret < 0 ) SP_error( ret );
+    strncpy(chatroom, group, strlen(group));
+    chatroom_start = malloc(sizeof(struct node));
+    chatroom_latest = chatroom_start;
+  }
+
 }
-void print_history();
+
+void print_history()
+{
+  struct node *t;
+  t = chatroom_start; /*Head pointer is assumed to be null */
+  if (chatroom != NULL)
+  {
+    while (t->next != NULL)
+    {
+      printf("%d: %s\n", t->sequence, t->data->text);
+      t = t->next;
+    }
+  } 
+  else 
+  {
+    printf("You must be in a chatroom to view history!\n>");
+  }
+}
+
 void show_servers()
 {
 	int ret;
@@ -175,15 +217,7 @@ static	void	User_command()
 				printf(" invalid chatroom \n>");
 				break;
 			}
-			if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
- 		        {
-			     	printf("Chatrooms cannot be 1-5.  These are reserved\n>");
-			}
- 		 	else {
-				ret = SP_join( Mbox, group );
-				if( ret < 0 ) SP_error( ret );
-				strncpy(chatroom, group, strlen(group));
-			}
+			join_room(group);
 			break;
                 case 'c':
 			ret = sscanf( &command[2], "%s", group );
@@ -214,8 +248,8 @@ static	void	User_command()
 			}
 			break;
  		case 'a':
-			ret = sscanf( &command[2], "%[^\n]", mtext );
-			if( ret < 1)
+			strncpy(mtext, &command[2], 140);
+			if( strlen(mtext) < 1)
 			{
 				printf(" invalid message\n>");
 				break;
@@ -231,6 +265,9 @@ static	void	User_command()
                         }
                         like_msg(like);
 			break;
+		case 'h':
+			print_history();
+			break;
 		case 'v':
 			show_servers();
 			break;
@@ -245,7 +282,12 @@ void recv_server_msg(struct chat_packet *c) {
    if (c->type == 0) /*Message packet */
    {
 	line_number++;
-	printf("%d: %s",line_number, c->text);
+	chatroom_latest->data = malloc(sizeof(struct chat_packet));
+	chatroom_latest->next = malloc(sizeof(struct node));	
+	chatroom_latest->sequence = line_number;
+	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
+	printf("%d:%s> %s",line_number, c->name, c->text);
+	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
    }
    else if (c->type == 2)
    {
@@ -304,8 +346,8 @@ if (ret < 0 )
                 else if( Is_causal_mess(     service_type ) ) printf("received CAUSAL ");
                 else if( Is_agreed_mess(     service_type ) ) printf("received AGREED ");
                 else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
-                printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
-                        sender, mess_type, endian_mismatch, num_groups, ret, mess );
+                /*printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
+                        sender, mess_type, endian_mismatch, num_groups, ret, mess ); */
 		recv_server_msg((struct chat_packet *) mess);
         }else if( Is_membership_mess( service_type ) )
         {
@@ -366,7 +408,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 
 
         printf("\n");
-        printf("User> ");
+        printf("> ");
         fflush(stdout);
 }
 
