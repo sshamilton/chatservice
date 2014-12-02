@@ -12,7 +12,7 @@ static  void    Bye();
 static  int     connected = 0;
 static  char    username[20];
 static  char    chatroom[MAX_GROUP_NAME] ="\0";
-
+static  int     line_number=0;
 void show_menu()
 {
 	printf("\n");
@@ -39,18 +39,22 @@ void send_msg(char *mtext)
 {
 int ret;
 struct chat_packet *c;
-	if (strlen(chatroom) > 1) 
+char group[80];
+c = malloc(sizeof(struct chat_packet));
+	if (strlen(chatroom) > 1 && connected > 0) 
 	{
+	 printf("Sending %s to group %s\n", mtext, chatroom);	
 		c->type = 0;//Chat message type
 		strncpy(c->text, mtext, strlen(mtext));
   		c->server_id = connected;
-		strncpy(c->name, username, strlen(username));
+		sprintf(group, "%d", connected);
 		strncpy(c->group, chatroom, strlen(chatroom));
+		strncpy(c->name, username, strlen(username));
 		c->sequence = 0; //Server updates this
 		c->like_sequence = 0; //Unused on text message
 		c->resend = 0; //Not sure we need this anymore
 		/* Send Message */
-		ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *)c);
+		ret = SP_multicast(Mbox, AGREED_MESS, group, 2, sizeof(struct chat_packet), (char *)c);
 		if( ret < 0 )
                 {
                 	SP_error( ret );
@@ -58,7 +62,12 @@ struct chat_packet *c;
 	}
 	else 
 	{
+		if (strlen(chatroom) <= 1) {
 		printf("Sorry, you must join a chat room to send a message.\n");
+		}
+		else {
+		printf("Please connect to a server before trying to send a message.\n");
+		}
 	}
 }
 void like_msg(int like)
@@ -115,30 +124,11 @@ void join_server(char *server_id)
         {
                 SP_error( ret );
         }
- 	/* Poll our inbox to see if the server responded */
-	ret = SP_poll(Mbox);
-	if ( ret > 0)
-	{
-		ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups,
-                &mess_type, &endian_mismatch, sizeof(mess), mess );
-		memcpy(r, mess, sizeof(mess));
-		if (r->type == 4) /*Received membership message from our private group */
-		{
-			printf("Successfully connected to server %d\n>", server_id);
-		}
-		else 
-		{
-			printf("Failed to connect to server (wrong message type)\n>");
-		}
-	}
-	else
-	{
-		printf("Failed to connect to server (no timeout set yet!)\n>");
-	}
-
-
 }
-void join_room();
+void join_room()
+{
+	
+}
 void print_history();
 void show_servers()
 {
@@ -192,6 +182,7 @@ static	void	User_command()
  		 	else {
 				ret = SP_join( Mbox, group );
 				if( ret < 0 ) SP_error( ret );
+				strncpy(chatroom, group, strlen(group));
 			}
 			break;
                 case 'c':
@@ -248,6 +239,20 @@ static	void	User_command()
 			break;
     }
 }
+void recv_server_msg(struct chat_packet *c) {
+   int ret;
+   printf("Got packet type %d\n", c->type);
+   if (c->type == 0) /*Message packet */
+   {
+	line_number++;
+	printf("%d: %s",line_number, c->text);
+   }
+   else if (c->type == 2)
+   {
+	printf("Successful connection to server %d", c->server_id);
+	connected = c->server_id;
+   }
+}
 static  void    Read_message()
 {
 
@@ -301,6 +306,7 @@ if (ret < 0 )
                 else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
                 printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
                         sender, mess_type, endian_mismatch, num_groups, ret, mess );
+		recv_server_msg((struct chat_packet *) mess);
         }else if( Is_membership_mess( service_type ) )
         {
                 ret = SP_get_memb_info( mess, service_type, &memb_info );
@@ -386,6 +392,7 @@ void main()
   show_menu();
   for(;;)
   {
+    E_handle_events();
     User_command();
   }
   exit (0);

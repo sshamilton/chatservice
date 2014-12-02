@@ -11,17 +11,16 @@ static  int     To_exit = 0;
 static  struct node     Server_packets[5];
 // Essentially the 5 tail nodes of the 5 linked lists.
 static  struct node*    Last_packets[5];
-static  FILE*   fd;
 // Pointer to last node that has been written to disk
 static  struct node*    Last_written;
+static  char	server[1];
+static  FILE   *fp;
 
-
-
-void read_disk(FILE *fp);
+void read_disk();
 void send_vector();
 void recv_update();
 void recv_client_msg();
-void write_data(FILE *fp);
+void write_data();
 void memb_change();
 
 
@@ -31,11 +30,11 @@ void memb_change();
  * server.
  * 2. Restore the vector.
  */
-void read_disk(FILE *fp) {
+void read_disk() {
   int                 i;
-  struct chat_packet* c_temp;
-
-  while (fread(c_temp, sizeof(struct chat_packet), 1, fd) != 0) {
+  struct chat_packet *c_temp;
+  c_temp = malloc(sizeof(struct chat_packet));
+  while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
     i = c_temp->server_id;
 
     // Allocate memory for the next node.
@@ -69,11 +68,42 @@ void read_disk(FILE *fp) {
         }
 }*/
 
-void recv_update() {
-
+void recv_client_msg(struct chat_packet *c) {
+   int ret;
+   printf("Got packet type %d\n", c->type);
+   if (c->type == 0)
+   {
+	/*Received text message*/
+	printf("Received text: %s\n", c->text);
+	Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
+	Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
+	memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
+        if (Last_written->next == NULL) /*First packet */
+        {
+		Last_written->next = Last_packets[atoi(server)]->next;
+        }
+	write_data();
+	Last_packets[atoi(server)] = Last_packets[atoi(server)]->next; /* Move pointer */ 
+	/* Send the message to the group */
+	SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+   }
+   else if (c->type == 1)
+   {
+	/*Received like */
+   }
+   else if (c->type == 2)
+   {
+	c->server_id = atoi(server); /*Set server id of packet */
+	ret = SP_multicast(Mbox, AGREED_MESS, c->text, 3, sizeof(struct chat_packet), (const char *) c); 
+	/*send acknowledgement to the client's private group */
+	if (ret < 0)
+	{
+		SP_error( ret );
+	}
+   }
 }
 
-void recv_client_msg() {
+void recv_update() {
 
 }
 
@@ -82,10 +112,15 @@ void recv_client_msg() {
  * This is because writing the entire nodes is meaningless because the
  * "next" and "data" pointers will become useless (?).
  */
-void write_data(FILE* fp) {
+void write_data() {
+  if (Last_written->next == NULL)
+  {
+	
+  }
   while (Last_written->next != NULL) {
     Last_written = Last_written->next;
     fwrite(Last_written->data, sizeof(struct chat_packet), 1, fp);
+    fflush(fp);
   }
 }
 
@@ -116,7 +151,6 @@ static  char             mess[MAX_MESSLEN];
         int              endian_mismatch;
         int              i,j;
         int              ret;
-
         service_type = 0;
 
         ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups, 
@@ -152,6 +186,13 @@ if (ret < 0 )
                 else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
                 printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
                         sender, mess_type, endian_mismatch, num_groups, ret, mess );
+		if (num_groups == 1) {
+			if (strncmp(target_groups[0], server, 1)==0) {
+			recv_client_msg((struct chat_packet *) mess);		
+			}
+			else { printf("First group: %s", target_groups[0]);
+			}
+		}
         }else if( Is_membership_mess( service_type ) )
         {
                 ret = SP_get_memb_info( mess, service_type, &memb_info );
@@ -213,7 +254,6 @@ if     ( Is_reg_memb_mess( service_type ) )
 
 
         printf("\n");
-        printf("User> ");
         fflush(stdout);
 
 }
@@ -221,11 +261,9 @@ if     ( Is_reg_memb_mess( service_type ) )
 void main(int argc, char **argv) 
 {
   int i;
-  int server;
   int ret;
   char group[80];
   char messages[5];
-  FILE *fp;
   struct node first_node; // Sentinel node used for read_disk()
   sp_time test_timeout;
   test_timeout.sec = 5;
@@ -236,7 +274,7 @@ void main(int argc, char **argv)
     printf("Usage: chat_server <server id (1-5)>\n");
     exit (0);
   }
-  server = atoi(argv[1]);
+  strncpy(server, argv[1], 1);
   printf("Chat Server %u running\n", server);
   E_init();
   ret = SP_connect_timeout( Spread_name, User, 0, 1, &Mbox, Private_group, test_timeout );
@@ -249,11 +287,9 @@ void main(int argc, char **argv)
   printf("Join group %d return:%d\n", server, ret);
   if (ret != 0) SP_error( ret );
   E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
-
   ret = SP_join(Mbox, "Servers"); 
   printf("Join group %d return:%d\n", server, ret);
   if (ret != 0) SP_error( ret );
-  E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
 
   // For clearing the data structure before use.
   for (i = 0; i < 5; i++) {
@@ -262,7 +298,6 @@ void main(int argc, char **argv)
     Server_packets[i].next_seq = NULL;
     Last_packets[i] = &Server_packets[i];
   }
-
   // Last_written starts out as a sentinel node.
   Last_written = &first_node;
   Last_written->data = NULL;
@@ -280,12 +315,12 @@ void main(int argc, char **argv)
     fp = fopen(argv[1], "w");
   } else {
     // If the file already exists, read to recover data lost from a crash.
-    read_disk(fp);
+    read_disk();
   }
 
   for (;;)
   {
-   ret =0;
+   E_handle_events();
   }
 
 }
