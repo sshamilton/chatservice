@@ -214,7 +214,7 @@ static	void	User_command()
 			}
 			break;
  		case 'a':
-			ret = sscanf( &command[2], "%s", mtext );
+			ret = sscanf( &command[2], "%[^\n]", mtext );
 			if( ret < 1)
 			{
 				printf(" invalid message\n>");
