@@ -23,7 +23,7 @@ struct likes {
 
 struct chat_packet {
   int type;//Type of packet 0 for message, 1 for like
-  int sequence; //Sequence of message given to the server
+  int sequence; //Lamport timestamp
   int server_id; //Server id that the message was created on.
   char name[25]; //Text name of user
   char group[25]; //Text name of chat room
@@ -38,6 +38,13 @@ struct vector {
   int vector[5][5];
 };
 
+struct chatrooms {
+  char name[25]; //Chat room name
+  struct node *head; /* first chat in room */
+  struct node *tail; /* Last chat in room */
+  struct chatrooms *next; 
+};
+
 
 /*
  *  These are the nodes used in data structure that holds the packets of
@@ -46,6 +53,5 @@ struct vector {
 struct node {
   struct chat_packet* data;
   struct node*        next;
-  struct node*        next_seq;
   int    sequence; /*Client line sequence number */
 };

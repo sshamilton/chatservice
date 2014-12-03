@@ -16,7 +16,7 @@ static  struct node*    Last_written;
 static  char	server[1];
 static  FILE   *fp;
 static  int    lsequence = 0;
-static  struct node*    Head; /*Beginning of chat sequence */
+static struct chatrooms* chatroomhead;
 
 void read_disk();
 void send_vector();
@@ -40,17 +40,16 @@ void memb_change();
  * 2. Restore the vector.
  */
 void read_disk() {
-  int                 i;
-  struct chat_packet *c_temp;
+  int                 i, foundroom =0;
+  struct chat_packet *c_temp, r_temp;
   c_temp = malloc(sizeof(struct chat_packet));
+  struct chatrooms *rooms;
+  rooms = chatroomhead;
   while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
     i = c_temp->server_id;
 
     // Allocate memory for the next node.
     Last_packets[i]->next = (struct node *) malloc(sizeof(struct node));
-
-    /* Point head to start */
-    if (Head == NULL) Head = Last_packets[i];
 
     // Update the n_temp pointer to new tail node.
     Last_packets[i] = Last_packets[i]->next;
@@ -61,11 +60,30 @@ void read_disk() {
     // memcpy the read data into the newly allocated memory for the next node.
     memcpy(Last_packets[i]->data, c_temp, sizeof(struct chat_packet));
 
+    while (rooms->next != NULL)
+    {
+       rooms = rooms->next;
+       if (strncmp(rooms->name, c_temp->group, strlen(c_temp->group) == 0))
+	{
+	  /*chatroom exists*/
+	  foundroom = 1;
+          rooms->tail = rooms->tail->next;
+	  rooms->tail->data = malloc(sizeof(struct chat_packet)); 
+	  memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
+	}
+    }
+    if (!foundroom) /*room doesn't exist, so create it */
+    {
+       rooms->next = malloc(sizeof(struct chatrooms));
+       rooms = rooms->next;
+       strncpy(rooms->name, c_temp->group, strlen(c_temp->group));
+       rooms->head->data = malloc(sizeof(struct chat_packet));
+       memcpy(rooms->head->data, c_temp, sizeof(struct chat_packet));
+
+    }
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
-    // Point the previous new node to the new new node.
-    Last_written->next_seq = Last_packets[i];
 
     // Update the Last_written to the newly created node.
     Last_written = Last_packets[i];
@@ -88,14 +106,13 @@ void recv_client_msg(struct chat_packet *c) {
 	/*Received text message*/
 	printf("Received text: %s\n", c->text);
 	lsequence++;
-	c->sequence = lsequence;
+	c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
 	Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
 	Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
 	memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
         if (Last_written->next == NULL) /*First packet */
         {
 		Last_written->next = Last_packets[atoi(server)]->next;
-		Last_written->next_seq = Last_packets[atoi(server)]->next;
         }
 	write_data();
 	Last_packets[atoi(server)] = Last_packets[atoi(server)]->next; /* Move pointer */ 
@@ -125,16 +142,23 @@ void recv_client_msg(struct chat_packet *c) {
                 SP_error( ret );
         }
 	/* Send room history to client */
-	struct node *i = Head;
 	struct chat_packet *u;
 	u = malloc(sizeof(struct chat_packet));
-	while (i->next_seq != NULL)
+	struct chatrooms *r;
+	struct node *i;
+	r = chatroomhead;
+        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+	{
+	  r = r->next;
+	}
+	i = r->head;
+	while (i->next != NULL)
 	{
 	  if (strncmp(i->data->group, c->group, strlen(c->group)) == 0)
 	  {
 	    memcpy(u, i->data, sizeof(struct chat_packet));
 	    ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
-	    i = i->next_seq;
+	    i = i->next;
 	  }
 	}	
 
@@ -333,7 +357,6 @@ void main(int argc, char **argv)
   for (i = 0; i < 5; i++) {
     Server_packets[i].data = NULL;
     Server_packets[i].next = NULL;
-    Server_packets[i].next_seq = NULL;
     Last_packets[i] = &Server_packets[i];
   }
   // Last_written starts out as a sentinel node.
