@@ -45,19 +45,21 @@ int ret;
 struct chat_packet *c;
 char group[80];
 c = malloc(sizeof(struct chat_packet));
+char server_group[1];
+sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
 	if (strlen(chatroom) > 1 && connected > 0 && strlen(username) >0) 
 	{
 	 printf("Sending %s to group %s\n", mtext, chatroom);	
 		c->type = 0;//Chat message type
 		strncpy(c->text, mtext, strlen(mtext));
   		c->server_id = connected;
-		sprintf(group, "%d", connected);
 		strncpy(c->group, chatroom, strlen(chatroom));
 		strncpy(c->name, username, strlen(username));
 		c->sequence = 0; //Server updates this
 		c->resend = 0; //Not sure we need this anymore
 		/* Send Message */
-		ret = SP_multicast(Mbox, AGREED_MESS, group, 2, sizeof(struct chat_packet), (char *)c);
+		printf("Sending to group %s\n", server_group);
+		ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
 		if( ret < 0 )
                 {
                 	SP_error( ret );
@@ -82,6 +84,8 @@ void like_msg(int like)
 	int ret;
 	struct chat_packet *c = malloc(sizeof(struct chat_packet));
 	struct node *i = chatroom_start->next;
+	char server_group[1];
+        sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
         while (i->sequence != like) (i=i->next);
           if (strlen(chatroom) > 1)
           {
@@ -91,7 +95,7 @@ void like_msg(int like)
                 strncpy(c->group, chatroom, strlen(chatroom));
                 c->sequence = i->data->sequence; 
                 /* Send Message */
-                ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
+                ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *) c);
                 if( ret < 0 )
                 {
                         SP_error( ret );
@@ -126,6 +130,7 @@ void join_server(char *server_id)
 	c->type = 2;//Request to join server
         strncpy(c->text, Private_group, strlen(Private_group));
         c->server_id = atoi(server_id);
+	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
         /* Send Message */
         ret = SP_multicast(Mbox, AGREED_MESS, server_id, 2, sizeof(struct chat_packet), (char *)c);
         if( ret < 0 )
@@ -137,6 +142,10 @@ void join_server(char *server_id)
 void join_room(char *group)
 {
   int ret;
+  struct chat_packet *c;
+  char server_group[1];
+  sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/ 
+  c = malloc(sizeof(struct chat_packet));
   if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
   {
     printf("Chatrooms cannot be 1-5.  These are reserved\n>");
@@ -146,11 +155,15 @@ void join_room(char *group)
     printf("Please set your username before joining a chat room\n>");
   }
   else {
-    ret = SP_join( Mbox, group );
-    if( ret < 0 ) SP_error( ret );
-    strncpy(chatroom, group, strlen(group));
-    chatroom_start = malloc(sizeof(struct node));
-    chatroom_latest = chatroom_start;
+  /* Send request to server to join a group */
+  strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
+  strncpy(c->group, group, strlen(group));
+  c->type = 5;
+  ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
+        if( ret < 0 )
+        {
+                SP_error( ret );
+        }
   }
 
 }
@@ -170,7 +183,7 @@ void print_history()
 	likes++;
 	i= i->next;
       }
-      printf("%d: %s\t(%u likes)\n", t->sequence, t->next->data->text, likes);
+      printf("%d: %s (%u likes)\n", t->sequence, t->next->data->text, likes);
       t = t->next;
       likes = 0;
     }
@@ -287,15 +300,18 @@ static	void	User_command()
 void recv_server_msg(struct chat_packet *c) {
    int ret;
    printf("Got packet type %d\n", c->type);
-   if (c->type == 0) /*Message packet */
+   if (c->type == 0 || c->type == 3) /*Message packet */
    {
-	line_number++;
+	if (c->type == 0) line_number++; /*Only update line number on text message */
 	chatroom_latest->next = malloc(sizeof(struct node));	
 	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
         chatroom_latest->data = malloc(sizeof(struct chat_packet));
         chatroom_latest->sequence = line_number;
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
-	printf("%d:%s> %s",line_number, c->name, c->text);
+        if (c->type == 0) /* Live message, display it */
+	{
+	  printf("%d:%s> %s",line_number, c->name, c->text);
+	}
    }
    else if (c->type == 1) /*like message */
    {
@@ -323,6 +339,32 @@ void recv_server_msg(struct chat_packet *c) {
 	printf("Successful connection to server %d", c->server_id);
 	connected = c->server_id;
    }
+   else if (c->type == 5) /* Received response to join group */
+   {
+     ret = SP_join( Mbox, c->group );
+     if( ret < 0 ) SP_error( ret );
+     strncpy(chatroom, c->group, strlen(c->group)-1); /*Remove server id from chatroom group name */
+     chatroom_start = malloc(sizeof(struct node));
+     chatroom_latest = chatroom_start;
+     printf("Successfully joined group %s", c->group-1); /* don't display server index at end of group */
+     line_number = 0; /*Refresh line number */
+   }
+   else if (c->type == 6) /*Refresh screen all after lamport timestamp */
+   {
+     struct node *i;
+     i = chatroom_start->next; /* Setup iterator */
+     line_number = 0;
+     while ((i !=NULL) && ((i->data->sequence != c->sequence) || (i->data->server_id != c->server_id)))
+     {  line_number++;
+	i = i->next; (printf("LOOP"));
+     }
+     while (i != NULL)
+    {
+	line_number++;
+	printf("%d:%s> %s",line_number, i->data->name, i->data->text);
+    }
+   }
+
 }
 static  void    Read_message()
 {
