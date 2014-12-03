@@ -343,6 +343,7 @@ void recv_server_msg(struct chat_packet *c) {
    {
      ret = SP_join( Mbox, c->group );
      if( ret < 0 ) SP_error( ret );
+     bzero(chatroom, MAX_GROUP_NAME);
      strncpy(chatroom, c->group, strlen(c->group)-1); /*Remove server id from chatroom group name */
      chatroom_start = malloc(sizeof(struct node));
      chatroom_latest = chatroom_start;

@@ -97,29 +97,82 @@ void read_disk() {
                 printf
         }
 }*/
+void recv_text(struct chat_packet *c){
+/*Received text message*/
+        struct chatrooms *r;
+        printf("Received text: %s\n", c->text);
+        lsequence++;
+        c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
+        Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
+        Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
+        memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
+        r = chatroomhead;
+        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+        {
+          r = r->next;
+        }
+	r->tail->next = malloc(sizeof(struct node));
+	r->tail->next->data = malloc(sizeof(struct chat_packet));
+	memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
+	r->tail = r->tail->next;
+
+        write_data();
+        Last_packets[atoi(server)] = Last_packets[atoi(server)]->next; /* Move pointer */
+        strcat(c->group, server); /*Append server id for server's group */
+        printf("Sending text to group %s\n", c->group);
+        /* Send the message to the group */
+        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+
+}
+
+void recv_join_msg(struct chat_packet *c) {
+  int ret;
+	/* Add server index to groupname */
+        strcat(c->group, server);
+        ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
+        /*send acknowledgement to the client's private group */
+        if (ret < 0)
+        {
+                SP_error( ret );
+        }
+        /* Send room history to client */
+        struct chat_packet *u;
+        u = malloc(sizeof(struct chat_packet));
+        struct chatrooms *r;
+        struct node *i;
+        r = chatroomhead;
+        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+        {
+          r = r->next;
+        }
+        if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+        {
+          r->next = malloc(sizeof(struct chatrooms));
+          r = r->next;
+          r->head = malloc(sizeof(struct node));
+          r->tail = r->head;
+          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
+        }
+        i = r->head;
+        while (i->next != NULL)
+        {
+          if (strncmp(i->data->group, c->group, strlen(c->group)) == 0)
+          {
+            memcpy(u, i->data, sizeof(struct chat_packet));
+            ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
+            i = i->next;
+          }
+        }
+
+
+}
 
 void recv_client_msg(struct chat_packet *c) {
    int ret;
    printf("Got packet type %d\n", c->type);
    if (c->type == 0 || c->type == 1)
    {
-	/*Received text message*/
-	printf("Received text: %s\n", c->text);
-	lsequence++;
-	c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
-	Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
-	Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
-	memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
-        if (Last_written->next == NULL) /*First packet */
-        {
-		Last_written->next = Last_packets[atoi(server)]->next;
-        }
-	write_data();
-	Last_packets[atoi(server)] = Last_packets[atoi(server)]->next; /* Move pointer */ 
-        strcat(c->group, server); /*Append server id for server's group */
-        printf("Sending text to group %s\n", c->group);
-	/* Send the message to the group */
-	SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+	recv_text(c);
    }
    else if (c->type == 2)
    {
@@ -133,34 +186,7 @@ void recv_client_msg(struct chat_packet *c) {
    }
    else if (c->type == 5) /* Request to join group */
    {
-	/* Add server index to groupname */
-	strcat(c->group, server);
-	ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
-        /*send acknowledgement to the client's private group */
-        if (ret < 0)
-        {
-                SP_error( ret );
-        }
-	/* Send room history to client */
-	struct chat_packet *u;
-	u = malloc(sizeof(struct chat_packet));
-	struct chatrooms *r;
-	struct node *i;
-	r = chatroomhead;
-        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
-	{
-	  r = r->next;
-	}
-	i = r->head;
-	while (i->next != NULL)
-	{
-	  if (strncmp(i->data->group, c->group, strlen(c->group)) == 0)
-	  {
-	    memcpy(u, i->data, sizeof(struct chat_packet));
-	    ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
-	    i = i->next;
-	  }
-	}	
+	recv_join_msg(c);
 
    }
 }
@@ -327,6 +353,7 @@ void main(int argc, char **argv)
   char group[80];
   char messages[5];
   struct node first_node; // Sentinel node used for read_disk()
+  chatroomhead = malloc(sizeof(struct chatrooms));
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;
