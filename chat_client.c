@@ -29,6 +29,7 @@ void show_menu()
 	printf("\tj <room> -- join chatroom\n");
         printf("\ta <text> -- append line/send message\n");
 	printf("\tl <line number> -- like message\n");
+        printf("\tr <line number> -- remove like from message\n");
 	printf("\th Print History\n");
 	printf("\tv View Chat Servers Available\n");
 	printf("\t? Display this menu\n");
@@ -54,7 +55,6 @@ c = malloc(sizeof(struct chat_packet));
 		strncpy(c->group, chatroom, strlen(chatroom));
 		strncpy(c->name, username, strlen(username));
 		c->sequence = 0; //Server updates this
-		c->like_sequence = 0; //Unused on text message
 		c->resend = 0; //Not sure we need this anymore
 		/* Send Message */
 		ret = SP_multicast(Mbox, AGREED_MESS, group, 2, sizeof(struct chat_packet), (char *)c);
@@ -80,27 +80,28 @@ c = malloc(sizeof(struct chat_packet));
 void like_msg(int like)
 {
 	int ret;
-	struct chat_packet *c;
-        if (strlen(chatroom) > 1)
-        {
+	struct chat_packet *c = malloc(sizeof(struct chat_packet));
+	struct node *i = chatroom_start->next;
+        while (i->sequence != like) (i=i->next);
+          if (strlen(chatroom) > 1)
+          {
                 c->type = 1;//Chat like type
-                c->server_id = connected;
+                c->server_id = i->data->server_id;
                 strncpy(c->name, username, strlen(username));
                 strncpy(c->group, chatroom, strlen(chatroom));
-                c->sequence = 0; //Server updates this
-                c->like_sequence = 0; //Need to calculate this***************
-                c->resend = 0; //Not sure we need this anymore
+                c->sequence = i->data->sequence; 
                 /* Send Message */
                 ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
                 if( ret < 0 )
                 {
                         SP_error( ret );
                 }
-        }
-        else
-        {
+          }
+          else
+          {
                 printf("Sorry, you must join a chat room to like a message.\n");
-        }
+          }
+       
 }
 void join_server(char *server_id)
 {
@@ -158,12 +159,20 @@ void print_history()
 {
   struct node *t;
   t = chatroom_start; /*Head pointer is assumed to be null */
+  int likes = 0;
+  struct likes *i;
   if (chatroom != NULL)
   {
     while (t->next != NULL)
     {
-      printf("%d: %s\n", t->sequence, t->data->text);
+      i = t->next->data->likes.next;
+      while (i != NULL) {
+	likes++;
+	i= i->next;
+      }
+      printf("%d: %s\t(%u likes)\n", t->sequence, t->next->data->text, likes);
       t = t->next;
+      likes = 0;
     }
   } 
   else 
@@ -182,7 +191,6 @@ void show_servers()
         strncpy(c->name, username, strlen(username));
         strncpy(c->group, chatroom, strlen(chatroom));
         c->sequence = 0; //Server updates this
-        c->like_sequence = 0; //Need to calculate this***************
         c->resend = 0; //Not sure we need this anymore
         /* Send Message */
         ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
@@ -257,7 +265,7 @@ static	void	User_command()
 			send_msg(mtext);
 			break;
 		case 'l':
-			ret = sscanf( &command[2], "%d", like  );
+			ret = sscanf( &command[2], "%d", &like  );
                         if( ret < 1)
                         {
                                 printf(" invalid line\n>");
@@ -282,12 +290,33 @@ void recv_server_msg(struct chat_packet *c) {
    if (c->type == 0) /*Message packet */
    {
 	line_number++;
-	chatroom_latest->data = malloc(sizeof(struct chat_packet));
 	chatroom_latest->next = malloc(sizeof(struct node));	
-	chatroom_latest->sequence = line_number;
+	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
+        chatroom_latest->data = malloc(sizeof(struct chat_packet));
+        chatroom_latest->sequence = line_number;
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
 	printf("%d:%s> %s",line_number, c->name, c->text);
-	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
+   }
+   else if (c->type == 1) /*like message */
+   {
+       struct node *i;
+       struct likes *l;
+       printf("Got like message from user %s, for message %d, Text:%s", c->name, c->sequence, c->text);
+       i = chatroom_start->next; /* Setup iterator */
+       printf("Istate: seq %u id: %u", i->data->sequence, i->data->server_id);
+       while ((i !=NULL) && ((i->data->sequence != c->sequence) || (i->data->server_id != c->server_id)))
+       {
+	 i = i->next; printf("LOOP\n");
+       }
+	 if (i != NULL)
+	 { printf("Data Seq: %u, serverid: %u\n", c->sequence, c->server_id);
+	   l = &(i->data->likes);
+           while (l->next != NULL) l = l->next;
+	   l->next = malloc(sizeof(struct likes));
+           strncpy(l->next->name, c->name, 20);  
+	   printf("Created like for msg:%s, seq:%u", i->data->text, i->data->sequence); 
+         }
+
    }
    else if (c->type == 2)
    {

@@ -16,6 +16,11 @@
 #define MAX_VSSETS      10
 #define MAX_MEMBERS     100
 
+struct likes {
+  char name[25];
+  struct likes *next;
+};
+
 struct chat_packet {
   int type;//Type of packet 0 for message, 1 for like
   int sequence; //Sequence of message given to the server
@@ -23,9 +28,10 @@ struct chat_packet {
   char name[25]; //Text name of user
   char group[25]; //Text name of chat room
   char text[80]; //Text of chat message
-  int like_sequence; //Integer of sequence number of message liked
+  struct likes likes; //Integer of sequence number of message liked
   int resend;
 };
+
 
 struct vector {
   int vector[5][5];

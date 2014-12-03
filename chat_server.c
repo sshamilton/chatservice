@@ -15,6 +15,7 @@ static  struct node*    Last_packets[5];
 static  struct node*    Last_written;
 static  char	server[1];
 static  FILE   *fp;
+static  int    lsequence = 0;
 
 void read_disk();
 void send_vector();
@@ -75,6 +76,8 @@ void recv_client_msg(struct chat_packet *c) {
    {
 	/*Received text message*/
 	printf("Received text: %s\n", c->text);
+	lsequence++;
+	c->sequence = lsequence;
 	Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
 	Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
 	memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
