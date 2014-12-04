@@ -4,7 +4,7 @@ static  char    User[MAX_PRIVATE_NAME];
 static  char    Spread_name[80];
 static  char    Private_group[MAX_GROUP_NAME];
 static  mailbox Mbox;
-static  struct vector*   Vector[5][5]; 
+static  int vector[6][6]; 
 static  int     Num_sent;
 static  unsigned int    Previous_len;
 static  int     To_exit = 0;
@@ -17,6 +17,8 @@ static  char	server[1];
 static  FILE   *fp;
 static  int    lsequence = 0;
 static struct chatrooms* chatroomhead;
+static  int    servers_available = 0;
+static  int	vectors_received = 0;
 
 void read_disk();
 void send_vector();
@@ -151,6 +153,8 @@ void recv_server_msg(struct chat_packet *c){
         printf("Sending text to group %s\n", c->group);
         /* Send the message to the group */
         SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+	/*Update vector */
+	vector[atoi(server)][c->server_id] = c->sequence;
 
 }
 
@@ -216,8 +220,17 @@ void recv_client_msg(struct chat_packet *c) {
    }
 }
 
-void recv_update() {
-
+void recv_update(int rvector[][6]) {
+printf("Recevied vector\n");
+int i, j;
+for (i=1; i<7; i++)
+{
+  for (j=1; j<7; j++)
+  {
+   printf("|%d|", rvector[i][j]);
+  }
+ printf("\n");
+}
 }
 
 /*
@@ -238,7 +251,9 @@ void write_data() {
 }
 
 void memb_change() {
-
+   vector[atoi(server)][atoi(server)] = lsequence *10 + atoi(server);
+   /*Send vector*/
+   SP_multicast(Mbox, AGREED_MESS, "Servers", 10, sizeof(int)*36, (const char *)vector);
 }
 
 static void Bye() {
@@ -303,10 +318,17 @@ if (ret < 0 )
 			if (strncmp(target_groups[0], server, 1)==0) {
 			recv_client_msg((struct chat_packet *) mess);		
 			}
-			else if (strncmp(target_groups[0], "Servers, cmp", 7)==0 && (sender[1] != server[0]))
+			else if (strncmp(target_groups[0], "Servers", 7)==0 && (sender[1] != server[0]))
 			{
 			  printf("Recevied message from another server cmp %d %d\n", sender[1], server[0]);
+			  if (mess_type == 10) /*Vector update */
+			  {
+				recv_update((int(*) [6]) mess);
+			  }
+			  else
+			  {
 			  recv_server_msg((struct chat_packet *) mess);
+			  }
 			}
 			else { printf("First group: %s", target_groups[0]);
 			}
@@ -332,6 +354,13 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
                                 // Deal with join of new member by joining the member's
                                 // private 
+                            if (strncmp(sender, "Servers", 7))
+			    {
+				servers_available = num_groups;  /*To determine how many servers to update */
+				printf("Running membership change\n");
+				memb_change();
+			    }
+
                         }else if( Is_caused_leave_mess( service_type ) ){
                                 printf("Due to the LEAVE of %s\n", memb_info.changed_member );
                         }else if( Is_caused_disconnect_mess( service_type ) ){
@@ -378,7 +407,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 
 void main(int argc, char **argv) 
 {
-  int i;
+  int i, j;
   int ret;
   char group[80];
   char messages[5];
@@ -420,6 +449,17 @@ void main(int argc, char **argv)
   Last_written = &first_node;
   Last_written->data = NULL;
   Last_written->next = NULL;
+
+  /* Initialize vector */
+for (i=1; i<7; i++)
+{  
+  for (j=1; j<7; j++)
+  {   
+   vector[i][j] =0;
+  }
+ printf("\n");
+}
+
 
   /*
    * File setup. Note that the files will just be named after the server

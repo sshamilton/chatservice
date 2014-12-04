@@ -158,8 +158,11 @@ void join_room(char *group)
   /*Disjoin from current group */
   if (strlen(chatroom) > 0)
   {
+	sprintf(chatroom, "%s%d",chatroom, connected);
+	printf("leaving chatroom, %s\n", chatroom);
 	SP_leave(Mbox, chatroom);
   }
+  printf("chatroom length = %d", strlen(chatroom));
   /* Send request to server to join a group */
   strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
   strncpy(c->group, group, strlen(group));

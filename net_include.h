@@ -34,10 +34,6 @@ struct chat_packet {
 };
 
 
-struct vector {
-  int vector[5][5];
-};
-
 struct chatrooms {
   char name[25]; //Chat room name
   struct node *head; /* first chat in room */
