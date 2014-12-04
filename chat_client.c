@@ -236,7 +236,8 @@ static	void	User_command()
 	for( i=0; i < sizeof(command); i++ ) command[i] = 0;
 	if( fgets( command, 130, stdin ) == NULL ) 
             Bye();
-
+	/* remove newline from string */
+	command[strlen(command) -1] = 0;
 	switch( command[0] )
 	{
 		case 'j':
@@ -277,7 +278,7 @@ static	void	User_command()
 			}
 			break;
  		case 'a':
-			strncpy(mtext, &command[2], 140);
+			strncpy(mtext, &command[2], 130);
 			if( strlen(mtext) < 1)
 			{
 				printf(" invalid message\n>");
@@ -304,10 +305,11 @@ static	void	User_command()
 			printf(">");
 			break;
     }
+   fflush(stdout); 
 }
 void recv_server_msg(struct chat_packet *c) {
    int ret;
-   printf("Got packet type %d\n", c->type);
+   //printf("Got packet type %d\n", c->type);
    if (c->type == 0 || c->type == 3) /*Message packet */
    {
 	if (c->type == 0) line_number++; /*Only update line number on text message */
@@ -397,7 +399,7 @@ static  char             mess[MAX_MESSLEN];
 
         ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups, 
                 &mess_type, &endian_mismatch, sizeof(mess), mess );
-        printf("\n============================\n");
+        //printf("\n============================\n");
         if( ret < 0 ) 
         {
                 if ( (ret == GROUPS_TOO_SHORT) || (ret == BUFFER_TOO_SHORT) ) {
@@ -424,11 +426,11 @@ if (ret < 0 )
                 else if( Is_reliable_mess(   service_type ) ) printf("received RELIABLE ");
                 else if( Is_fifo_mess(       service_type ) ) printf("received FIFO ");
                 else if( Is_causal_mess(     service_type ) ) printf("received CAUSAL ");
-                else if( Is_agreed_mess(     service_type ) ) printf("received AGREED ");
+                //else if( Is_agreed_mess(     service_type ) ) printf("received AGREED ");
                 else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
-                printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
-                        sender, mess_type, endian_mismatch, num_groups, ret, mess ); 
-	 	printf("private group is %s\n", Private_group);
+                //printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
+                //        sender, mess_type, endian_mismatch, num_groups, ret, mess ); 
+	 	//printf("private group is %s\n", Private_group);
 		if (strncmp(Private_group, sender, strlen(Private_group)) != 0)
 		{	
 		   recv_server_msg((struct chat_packet *) mess);

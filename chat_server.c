@@ -107,6 +107,27 @@ void read_disk() {
 
     rooms = chatroomhead;
   }
+    /*Update our LTS */
+    lsequence = (Last_packets[atoi(server)]->sequence - atoi(server))/10;
+    printf("Setting our LTS sequence to %d\n", lsequence);
+    /*For debugging list chatrooms, and chats  loaded*/
+    printf("Loaded from disk:\n");
+    rooms = chatroomhead->next;
+    while(rooms != NULL)
+    {
+	printf("Room: %s\n", rooms->name);
+	struct node* i;
+	i = rooms->head->next;
+	while (i != NULL)
+	{
+	  printf("|%u|", i->data->sequence);
+	  i = i->next;
+	}
+	printf("\n");
+	rooms = rooms->next;
+	
+    }
+  
 }
  
 /*void send_vector() {
@@ -185,7 +206,9 @@ void recv_server_msg(struct chat_packet *c){
 
 void recv_join_msg(struct chat_packet *c) {
   int ret;
+  char groupname[MAX_GROUP_NAME];
 	/* Add server index to groupname */
+	strncpy(groupname, c->group, strlen(c->group));
         strcat(c->group, server);
         ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
         /*send acknowledgement to the client's private group */
@@ -198,17 +221,17 @@ void recv_join_msg(struct chat_packet *c) {
         struct chatrooms *r;
         struct node *i;
         r = chatroomhead;
-        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+        while (r->next != NULL && (strncmp(r->name, groupname, strlen(c->group)) != 0))
         {
           r = r->next;
         }
-        if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+        if (strncmp(r->name, groupname, strlen(groupname)) != 0) /*Chat room doesn't exist*/
         {
           r->next = malloc(sizeof(struct chatrooms));
           r = r->next;
           r->head = malloc(sizeof(struct node));
           r->tail = r->head;
-          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
+          strncpy(r->name, groupname, strlen(groupname)); /*Copy name to chatroom */
         }
         i = r->head->next;
         while (i != NULL)
