@@ -122,6 +122,35 @@ void recv_text(struct chat_packet *c){
         printf("Sending text to group %s\n", c->group);
         /* Send the message to the group */
         SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+	/* Send message to servers */
+	c->group[strlen(c->group) -1] = '\0'; /*Remove the trailing server id*/
+	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
+
+}
+
+void recv_server_msg(struct chat_packet *c){
+	struct chatrooms *r;
+        printf("Received text: %s\n", c->text);
+        lsequence++;
+        Last_packets[c->server_id]->next = malloc(sizeof(struct node));
+        Last_packets[c->server_id]->next->data = malloc(sizeof(struct chat_packet));
+        memcpy(Last_packets[c->server_id]->next->data, c, sizeof(struct chat_packet));
+        r = chatroomhead;
+        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+        {
+          r = r->next;
+        }
+        r->tail->next = malloc(sizeof(struct node));
+        r->tail->next->data = malloc(sizeof(struct chat_packet));
+        memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
+        r->tail = r->tail->next;
+
+        write_data();
+        Last_packets[c->server_id] = Last_packets[c->server_id]->next; /* Move pointer */
+        strcat(c->group, server); /*Append server id for server's group */
+        printf("Sending text to group %s\n", c->group);
+        /* Send the message to the group */
+        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
 
 }
 
@@ -137,7 +166,6 @@ void recv_join_msg(struct chat_packet *c) {
         }
         /* Send room history to client */
         struct chat_packet *u;
-        u = malloc(sizeof(struct chat_packet));
         struct chatrooms *r;
         struct node *i;
         r = chatroomhead;
@@ -153,15 +181,12 @@ void recv_join_msg(struct chat_packet *c) {
           r->tail = r->head;
           strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
         }
-        i = r->head;
-        while (i->next != NULL)
+        i = r->head->next;
+        while (i != NULL)
         {
-          if (strncmp(i->data->group, c->group, strlen(c->group)) == 0)
-          {
-            memcpy(u, i->data, sizeof(struct chat_packet));
-            ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
-            i = i->next;
-          }
+          ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) i->data);
+          i = i->next;
+          
         }
 
 
@@ -278,6 +303,11 @@ if (ret < 0 )
 			if (strncmp(target_groups[0], server, 1)==0) {
 			recv_client_msg((struct chat_packet *) mess);		
 			}
+			else if (strncmp(target_groups[0], "Servers, cmp", 7)==0 && (sender[1] != server[0]))
+			{
+			  printf("Recevied message from another server cmp %d %d\n", sender[1], server[0]);
+			  recv_server_msg((struct chat_packet *) mess);
+			}
 			else { printf("First group: %s", target_groups[0]);
 			}
 		}
@@ -366,7 +396,7 @@ void main(int argc, char **argv)
   strncpy(server, argv[1], 1);
   printf("Chat Server %u running\n", server);
   E_init();
-  ret = SP_connect_timeout( Spread_name, User, 0, 1, &Mbox, Private_group, test_timeout );
+  ret = SP_connect_timeout( Spread_name, server, 0, 1, &Mbox, Private_group, test_timeout );
   if( ret != ACCEPT_SESSION ) {
     SP_error( ret );
     Bye();

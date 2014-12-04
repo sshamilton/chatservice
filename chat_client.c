@@ -155,6 +155,11 @@ void join_room(char *group)
     printf("Please set your username before joining a chat room\n>");
   }
   else {
+  /*Disjoin from current group */
+  if (strlen(chatroom) > 0)
+  {
+	SP_leave(Mbox, chatroom);
+  }
   /* Send request to server to join a group */
   strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
   strncpy(c->group, group, strlen(group));
@@ -310,7 +315,7 @@ void recv_server_msg(struct chat_packet *c) {
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
         if (c->type == 0) /* Live message, display it */
 	{
-	  printf("%d:%s> %s",line_number, c->name, c->text);
+	  printf("%d:%s> %s|LTS: %d",line_number, c->name, c->text, c->sequence);
 	}
    }
    else if (c->type == 1) /*like message */
@@ -418,9 +423,13 @@ if (ret < 0 )
                 else if( Is_causal_mess(     service_type ) ) printf("received CAUSAL ");
                 else if( Is_agreed_mess(     service_type ) ) printf("received AGREED ");
                 else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
-                /*printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
-                        sender, mess_type, endian_mismatch, num_groups, ret, mess ); */
-		recv_server_msg((struct chat_packet *) mess);
+                printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
+                        sender, mess_type, endian_mismatch, num_groups, ret, mess ); 
+	 	printf("private group is %s\n", Private_group);
+		if (strncmp(Private_group, sender, strlen(Private_group)) != 0)
+		{	
+		   recv_server_msg((struct chat_packet *) mess);
+		}
         }else if( Is_membership_mess( service_type ) )
         {
                 ret = SP_get_memb_info( mess, service_type, &memb_info );
@@ -500,7 +509,6 @@ void main()
         }
         printf("Connected to %s with private group %s\n", Spread_name, Private_group );
 
-  //ret = SP_join(Mbox, group); printf("Join group %s:%d\n", group, ret);
   E_attach_fd( 0, READ_FD, User_command, 0, NULL, LOW_PRIORITY );
   E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
   show_menu();
