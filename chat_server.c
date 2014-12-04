@@ -101,7 +101,8 @@ void read_disk() {
 	rooms->tail->data = malloc(sizeof(struct chat_packet));
 	memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
     }
-
+    /* Update our LTS vector */
+    vector[atoi(server)][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
@@ -171,6 +172,8 @@ void recv_text(struct chat_packet *c){
 void recv_server_msg(struct chat_packet *c){
 	struct chatrooms *r;
         printf("Received text: %s\n", c->text);
+   	/* Check to make sure we don't already have it */
+    if (c->sequence > Last_packets[c->server_id]->sequence) {
         lsequence++;
         Last_packets[c->server_id]->next = malloc(sizeof(struct node));
         Last_packets[c->server_id]->next->data = malloc(sizeof(struct chat_packet));
@@ -201,6 +204,11 @@ void recv_server_msg(struct chat_packet *c){
         SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
 	/*Update vector */
 	vector[atoi(server)][c->server_id] = c->sequence;
+     }
+     else 
+     {
+        printf("Packet received already.\n");
+     }
 
 }
 
@@ -268,15 +276,38 @@ void recv_client_msg(struct chat_packet *c) {
    }
 }
 
-void send_all_after(int max, int c)
+void send_all_after(int min, int c)
 {
  /*Send all after LTS here */
-  printf("Send lts %d", max);
+ int ret;
+ struct node *i;
+ i = &Server_packets[c];
+ i = i->next; /*Head is null */
+ if (i != NULL && min < 10) /* Advance to first LTS */
+ {
+   min = i->sequence;
+ }
+    printf("Send lts %d, for server %d", min, c);
+  
+    while (i != NULL && i->sequence < min) 
+    {
+      i=i->next;
+    }
+    while (i != NULL)
+    {
+      printf("Sending packet with LTS:%d", i->sequence);
+      SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) i->data);
+      if (ret < 0)
+        {
+                SP_error( ret );
+        }
+      i = i->next;
+    }
+  
 }
 
-void recv_update(int rvector[][6]) {
-int max, c;
-printf("Recevied vector\n");
+void showmatrix(int rvector[][6])
+{
 int i, j;
 for (i=1; i<6; i++)
 {
@@ -288,14 +319,30 @@ for (i=1; i<6; i++)
  printf("\n");
 }
 
+}
+
+
+void recv_update(int rvector[][6]) {
+int max, min, c, i, j;
+printf("Recevied vector\n");
+showmatrix((int(*) [6]) rvector);
+
 /*Determine if we have recevied all the updates */
 vectors_received++;
-
+printf("Comparing vrec %d with serv-avail %d\n", vectors_received, servers_available-1);
 if (vectors_received == servers_available -1) /*We got all the updates */
 {
+   /*Reset vector count */
+   vectors_received = 0;
+   printf("Got all updates after join, checking to see what we need to send\n");
+   printf("Current matrix:\n");
+
+   showmatrix((int(*) [6]) vector);
+
    for (i = 1; i<6; i++)
    {
      max=0;
+     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d", min);
      for (j=1; j<6; j++)
      {
 	if (vector[j][i] > max)
@@ -303,10 +350,15 @@ if (vectors_received == servers_available -1) /*We got all the updates */
 	   max = vector[j][i];
 	   c = j;
 	}
+	if (vector[j][i] < min)
+        {
+	   min = vector[j][i]; printf("R%d", min);
+        }
      }
-     if (c == atoi(server)) /*We have the latest, so send all after LTS */
+
+     if (c == atoi(server)) /*We have the latest, so send all after min LTS */
      {
-	send_all_after(max, c);
+	send_all_after(min, c);
      }
    }
 }
