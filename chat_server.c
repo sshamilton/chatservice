@@ -142,6 +142,14 @@ void recv_server_msg(struct chat_packet *c){
         {
           r = r->next;
         }
+	if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+        {
+          r->next = malloc(sizeof(struct chatrooms));
+          r = r->next;
+          r->head = malloc(sizeof(struct node));
+          r->tail = r->head;
+          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
+        }
         r->tail->next = malloc(sizeof(struct node));
         r->tail->next->data = malloc(sizeof(struct chat_packet));
         memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
@@ -220,17 +228,49 @@ void recv_client_msg(struct chat_packet *c) {
    }
 }
 
+void send_all_after(int max, int c)
+{
+ /*Send all after LTS here */
+  printf("Send lts %d", max);
+}
+
 void recv_update(int rvector[][6]) {
+int max, c;
 printf("Recevied vector\n");
 int i, j;
-for (i=1; i<7; i++)
+for (i=1; i<6; i++)
 {
-  for (j=1; j<7; j++)
+  for (j=1; j<6; j++)
   {
    printf("|%d|", rvector[i][j]);
+   if (rvector[i][j] > vector[i][j]) vector[i][j] = rvector[i][j];
   }
  printf("\n");
 }
+
+/*Determine if we have recevied all the updates */
+vectors_received++;
+
+if (vectors_received == servers_available -1) /*We got all the updates */
+{
+   for (i = 1; i<6; i++)
+   {
+     max=0;
+     for (j=1; j<6; j++)
+     {
+	if (vector[j][i] > max)
+	{
+	   max = vector[j][i];
+	   c = j;
+	}
+     }
+     if (c == atoi(server)) /*We have the latest, so send all after LTS */
+     {
+	send_all_after(max, c);
+     }
+   }
+}
+
 }
 
 /*
@@ -354,7 +394,7 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
                                 // Deal with join of new member by joining the member's
                                 // private 
-                            if (strncmp(sender, "Servers", 7))
+                            if (strncmp(sender, "Servers", 7)==0)
 			    {
 				servers_available = num_groups;  /*To determine how many servers to update */
 				printf("Running membership change\n");
