@@ -11,8 +11,7 @@ static  int     To_exit = 0;
 static  struct node     Server_packets[5];
 // Essentially the 5 tail nodes of the 5 linked lists.
 static  struct node*    Last_packets[5];
-// Pointer to last node that has been written to disk
-static  struct node*    Last_written;
+static  struct node*    Last_written[5];
 static  char	server[1];
 static  FILE   *fp;
 static  int    lsequence = 0;
@@ -43,18 +42,20 @@ void memb_change();
  */
 void read_disk() {
   int                 i, foundroom =0;
-  struct chat_packet *c_temp, r_temp;
+  struct chat_packet *c_temp;
   c_temp = malloc(sizeof(struct chat_packet));
   struct chatrooms *rooms;
+  struct node *temp, *temp2;
   rooms = chatroomhead;
   while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
-    i = c_temp->server_id;
+    i = c_temp->server_id - 1;
 
     // Allocate memory for the next node.
     Last_packets[i]->next = (struct node *) malloc(sizeof(struct node));
 
-    // Update the n_temp pointer to new tail node.
+    // Update the pointer to new tail node.
     Last_packets[i] = Last_packets[i]->next;
+    Last_written[i] = Last_written[i]->next;
 
     // Allocate memory for the new node's data.
     Last_packets[i]->data = (struct chat_packet *) malloc(sizeof(struct chat_packet));
@@ -65,30 +66,46 @@ void read_disk() {
     while (rooms->next != NULL)
     {
        rooms = rooms->next;
-       if (strncmp(rooms->name, c_temp->group, strlen(c_temp->group) == 0))
+       if (strncmp(rooms->name, c_temp->group, strlen(c_temp->group)) == 0)
 	{
 	  /*chatroom exists*/
 	  foundroom = 1;
-          rooms->tail = rooms->tail->next;
-	  rooms->tail->data = malloc(sizeof(struct chat_packet)); 
-	  memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
+	  break;
 	}
     }
     if (!foundroom) /*room doesn't exist, so create it */
     {
        rooms->next = malloc(sizeof(struct chatrooms));
        rooms = rooms->next;
+       rooms->head = malloc(sizeof(struct node));
        strncpy(rooms->name, c_temp->group, strlen(c_temp->group));
-       rooms->head->data = malloc(sizeof(struct chat_packet));
-       memcpy(rooms->head->data, c_temp, sizeof(struct chat_packet));
-
+       rooms->tail = rooms->head;
     }
+
+    temp = rooms->head;
+    while (temp->next != NULL) {
+       if (c_temp->sequence < temp->next->data->sequence) {
+	 temp2 = temp->next;
+	 temp->next = malloc(sizeof(struct node));
+	 temp->next->data = malloc(sizeof(struct chat_packet));
+	 memcpy(temp->next->data, c_temp, sizeof(struct chat_packet));
+	 temp->next->next = temp2;
+	 break;
+       }
+       temp = temp->next;
+    }
+
+    if (temp->next == NULL) {
+	rooms->tail->next = malloc(sizeof(struct node));
+	rooms->tail = rooms->tail->next;
+	rooms->tail->data = malloc(sizeof(struct chat_packet));
+	memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
+    }
+
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
-
-    // Update the Last_written to the newly created node.
-    Last_written = Last_packets[i];
+    rooms = chatroomhead;
   }
 }
  
@@ -279,15 +296,14 @@ if (vectors_received == servers_available -1) /*We got all the updates */
  * "next" and "data" pointers will become useless (?).
  */
 void write_data() {
-  if (Last_written->next == NULL)
-  {
-	
-  }
-  while (Last_written->next != NULL) {
-    Last_written = Last_written->next;
-    fwrite(Last_written->data, sizeof(struct chat_packet), 1, fp);
-    fflush(fp);
-  }
+	int i;
+	for (i = 0; i < 5; i++) {
+	  while (Last_written[i]->next != NULL) {
+		Last_written[i] = Last_written[i]->next;
+		fwrite(Last_written[i]->data, sizeof(struct chat_packet), 1, fp);
+		fflush(fp);
+	  }
+	}
 }
 
 void memb_change() {
@@ -484,16 +500,13 @@ void main(int argc, char **argv)
     Server_packets[i].data = NULL;
     Server_packets[i].next = NULL;
     Last_packets[i] = &Server_packets[i];
+    Last_written[i] = &Server_packets[i];
   }
-  // Last_written starts out as a sentinel node.
-  Last_written = &first_node;
-  Last_written->data = NULL;
-  Last_written->next = NULL;
 
   /* Initialize vector */
 for (i=1; i<7; i++)
 {  
-  for (j=1; j<7; j++)
+  for (j=1; j<6; j++)
   {   
    vector[i][j] =0;
   }
