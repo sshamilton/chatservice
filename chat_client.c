@@ -96,7 +96,7 @@ void like_msg(int like, int ul)
 		if (ul == 1) {
                   c->type = 1;//Chat like type
 		} else c->type = 7; // Unlike
-                c->server_id = i->data->server_id;
+                c->server_id = connected;
                 strncpy(c->name, username, strlen(username));
                 strncpy(c->group, chatroom, strlen(chatroom));
                 c->lts = i->data->sequence; 
