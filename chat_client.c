@@ -85,6 +85,10 @@ void like_msg(int like, int ul)
 	struct chat_packet *c = malloc(sizeof(struct chat_packet));
 	struct node *i = chatroom_start->next;
 	char server_group[1];
+	if (like > line_number) {
+		printf("Nonexistent line\n> ");
+		return;
+	}
         sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
         while (i->sequence != like) (i=i->next);
           if (strlen(chatroom) > 1)
@@ -183,22 +187,14 @@ void print_history()
 {
   struct node *t;
   t = chatroom_start; /*Head pointer is assumed to be null */
-  int likes = 0;
-  struct likes *i;
   if (chatroom != NULL)
   {
     while (t->next != NULL)
     {
-      i = t->next->data->likes.next;
-      while (i != NULL) {
-	likes++;
-	i= i->next;
-      }
-      printf("%d: %s (%u likes)\n", t->next->sequence, t->next->data->text, likes);
+      printf("%d: %s (%u likes)\n", t->next->sequence, t->next->data->text, t->next->data->num_likes);
       t = t->next;
-      likes = 0;
-    }
-  } 
+	    }
+	  } 
   else 
   {
     printf("You must be in a chatroom to view history!\n>");
@@ -320,10 +316,27 @@ static	void	User_command()
     }
    fflush(stdout); 
 }
-void recv_server_msg(struct chat_packet *c) {
+void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    int ret;
+   struct node *temp;
    //printf("Got packet type %d\n", c->type);
-   if (c->type == 0 || c->type == 3) /*Message packet */
+   if (mess_type == 5) { // If the mess_type is 5, that means we already have the chat_packet, we just want to update the likes.
+	temp = chatroom_start->next;
+	while (temp != NULL) {
+		if (temp->data->sequence == c->sequence) {
+		  temp->data->num_likes = c->num_likes;
+		  break;
+		}
+		temp = temp->next;
+	}
+   }
+   else if (mess_type == 13) {
+	temp = chatroom_start;
+	while (temp->next != NULL) {
+	  if (c->sequence < temp->next->data->sequence);// FINISH 
+	}
+   }
+   else if (c->type == 0 || c->type == 3) /*Message packet */
    {
 	if (c->type == 0) line_number++; /*Only update line number on text message */
 	chatroom_latest->next = malloc(sizeof(struct node));	
@@ -336,12 +349,12 @@ void recv_server_msg(struct chat_packet *c) {
 	  printf("%d:%s> %s|LTS: %d",line_number, c->name, c->text, c->sequence);
 	}
    }
-   else if (c->type == 1) /*like message */
+/*   else if (c->type == 1) like message 
    {
        struct node *i;
        struct likes *l;
        printf("Got like message from user %s, for message %d, Text:%s", c->name, c->sequence, c->text);
-       i = chatroom_start->next; /* Setup iterator */
+       i = chatroom_start->next;  Setup iterator 
        printf("Istate: seq %u id: %u", i->data->sequence, i->data->server_id);
        while ((i !=NULL) && ((i->data->sequence != c->sequence) || (i->data->server_id != c->server_id)))
        {
@@ -356,7 +369,7 @@ void recv_server_msg(struct chat_packet *c) {
 	   printf("Created like for msg:%s, seq:%u", i->data->text, i->data->sequence); 
          }
 
-   }
+   }*/
    else if (c->type == 2)
    {
 	printf("Successful connection to server %d", c->server_id);
@@ -446,7 +459,7 @@ if (ret < 0 )
 	 	//printf("private group is %s\n", Private_group);
 		if (strncmp(Private_group, sender, strlen(Private_group)) != 0)
 		{	
-		   recv_server_msg((struct chat_packet *) mess);
+		   recv_server_msg((struct chat_packet *) mess, mess_type);
 		}
         }else if( Is_membership_mess( service_type ) )
         {

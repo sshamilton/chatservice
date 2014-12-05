@@ -30,9 +30,9 @@ struct chat_packet {
   char name[25]; //Text name of user
   char group[25]; //Text name of chat room
   char text[80]; //Text of chat message
-  struct likes likes; //Integer of sequence number of message liked
   char client_group[MAX_GROUP_NAME]; //Used to ID client private group so server can respond
   int lts;
+  int num_likes;
 };
 
 
@@ -53,4 +53,5 @@ struct node {
   struct node*        next;
   struct likes*	      likes;
   int    sequence; /*Client line sequence number */
+  int	 exists;
 };

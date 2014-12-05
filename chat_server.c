@@ -134,6 +134,25 @@ void read_disk() {
   
 }
 
+void send_liked_msg(struct node *msg, int received) { // The received field says whether the clients already have this chat_packet.
+	struct chat_packet temp;
+	struct likes *l = msg->likes->next;;
+	memcpy(&temp, msg->data, sizeof(struct chat_packet));
+        strcat(temp.group, server); /*Append server id for server's group */
+	/*count likes */
+	while (l != NULL) {
+		if (l->like == 1) temp.num_likes++;
+		l = l->next;
+	}
+        printf("Sending text to group %s\n", temp.group);
+	if (received == 1) {
+	        SP_multicast(Mbox, AGREED_MESS, temp.group, 5, sizeof(struct chat_packet), (const char *) (&temp));
+	} else if (received == 0) {
+		// This happens only for chat_packets that are sent from a membership change. So the client will need to insert these in order of LTS.
+	        SP_multicast(Mbox, AGREED_MESS, temp.group, 13, sizeof(struct chat_packet), (const char *) (&temp));
+	}
+}
+
 void recv_like(struct chat_packet *c) {
 	struct chatrooms *r;
 	struct node	 *temp;
@@ -162,7 +181,7 @@ void recv_like(struct chat_packet *c) {
 	temp = r->head->next;
 	while (temp != NULL) {
 		if (c->lts == temp->data->sequence) {
-			l = temp->likes;
+			l = temp->likes; // Head like is empty
 			while (l->next != NULL) {
 			  if (strncmp(l->next->name, c->name, strlen(c->name)) == 0) {
 				if (c->type == 7) {
@@ -171,6 +190,8 @@ void recv_like(struct chat_packet *c) {
 				  l->next->like = 1;
 				}
 				l->next->like_timestamp = c->sequence;
+				
+				break;
 			  }
 			  l = l->next;
 			}
@@ -186,26 +207,20 @@ void recv_like(struct chat_packet *c) {
 			  l->like_timestamp = c->sequence;
 			  strcpy(l->name, c->name);
 			}
+
 			break;
 		}
 		temp = temp->next;
 	}
 
-        r->tail->next = malloc(sizeof(struct node));
-        r->tail->next->data = malloc(sizeof(struct chat_packet));
-        memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
-        r->tail = r->tail->next;
-
         write_data();
-        Last_packets[c->server_id] = Last_packets[c->server_id]->next; /* Move pointer */
-        strcat(c->group, server); /*Append server id for server's group */
-        printf("Sending text to group %s\n", c->group);
-        /* Send the message to the group */
-        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
+        /* Send the message to the group with the modified likes to the group*/
+	send_liked_msg(temp, 1);
+	/* Send message to servers */
+	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
 	/*Update vector */
 	vector[atoi(server)][c->server_id] = c->sequence;
-	
-
 }
  
 void recv_text(struct chat_packet *c) {
@@ -214,6 +229,7 @@ void recv_text(struct chat_packet *c) {
         printf("Received text: %s\n", c->text);
         lsequence++;
         c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
+	c->num_likes = 0;
 
 	/* Insert into the array-linkedlist data structure */
         Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
@@ -228,7 +244,8 @@ void recv_text(struct chat_packet *c) {
         }
 	r->tail->next = malloc(sizeof(struct node));
 	r->tail->next->data = malloc(sizeof(struct chat_packet));
-	r->tail->likes = malloc(sizeof(struct likes));
+	r->tail->next->likes = malloc(sizeof(struct likes));
+	r->tail->next->exists = 1;
 	memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
 	r->tail = r->tail->next;
 
@@ -244,16 +261,135 @@ void recv_text(struct chat_packet *c) {
 
 }
 
-void recv_server_msg(struct chat_packet *c, int16 mess_type){
+void recv_server_like(struct chat_packet *c, int16 mess_type) {
 	struct chatrooms *r;
-	struct node *temp, *temp2;
-        printf("Received text: %s\n", c->text);
-   	/* Check to make sure we don't already have it */
+	struct node	 *temp, *temp2;
+	struct likes	 *l;
 	if (c->sequence > vector[atoi(server)][c->server_id] || mess_type == 5) {
-	        lsequence++;
+		/*Update vector and lsequence*/
+		if ((c->sequence > vector[atoi(server)][c->server_id])) {
+			vector[atoi(server)][c->server_id] = c->sequence;
+		}
+		if (c->sequence > (lsequence * 10)) {
+			lsequence = c->sequence / 10;
+		}
 	        Last_packets[c->server_id - 1]->next = malloc(sizeof(struct node));
 	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
 	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
+	        r = chatroomhead;
+
+		// Find the correct group.
+	        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+	        {
+	          r = r->next;
+	        }
+		if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+	        {
+	          r->next = malloc(sizeof(struct chatrooms));
+	          r = r->next;
+	          r->head = malloc(sizeof(struct node));
+	          r->tail = r->head;
+	          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
+	        }
+	
+		temp = r->head;
+		while (temp->next != NULL) {
+			if (c->lts == temp->next->data->sequence) {
+				l = temp->next->likes;
+				while (l->next != NULL) {
+				  /* find the user who liked && check if the timestamp is larger */
+				  if (strncmp(l->next->name, c->name, strlen(c->name)) == 0) {
+					if (l->next->like_timestamp > c->sequence) break; // Break if the like_timestamp is larger than the chat_packet's
+					if (c->type == 7) {
+					  l->next->like = 0;
+					} else {
+					  l->next->like = 1;
+					}
+					l->next->like_timestamp = c->sequence;
+					
+					break;
+				  }
+				  l = l->next;
+				}
+	
+				if (l->next == NULL) {
+				  l->next = malloc(sizeof(struct likes));
+				  l = l->next;
+				  if (c->type == 7) {
+				    l->like = 0;
+				  } else {
+				    l->like = 1;
+				  }
+				  l->like_timestamp = c->sequence;
+				  strcpy(l->name, c->name);
+				}
+	
+				break;
+			}
+			else if (c->lts < temp->next->data->sequence) { /*received a like for a nonreceived chat_packet so create a placeholder with node.exists = 0*/
+				temp2 = temp->next;
+				temp->next = malloc(sizeof(struct node));
+				temp->next->data = malloc(sizeof(struct chat_packet));
+				temp->next->data->sequence = c->lts; // This is the LTS of the chat_packet that is supposed to go here
+				temp->next->exists = 0; // This chat_packet has not be received
+				temp->next->next = temp2;
+				temp->next->likes = malloc(sizeof(struct likes)); // First "likes" is an empty head node
+				l = temp->next->likes;
+				l->next = malloc(sizeof(struct likes));
+				l = l->next;
+				if (c->type == 7) {
+				  l->like = 0;
+				} else {
+				  l->like = 1;
+				}
+				l->like_timestamp = c->sequence;
+				strcpy(l->name, c->name);
+				break;
+			}
+			temp = temp->next;
+		}
+	
+	        write_data();
+	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
+		if (temp->next->exists == 1) {
+		        /* Send the message to the group with the modified likes to the group*/
+			send_liked_msg(temp->next, 1);
+		}
+	}
+	else
+	{
+		printf("Packet received already.\n");
+	}
+}
+
+void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEMENT FILLING IN A MISSING CHAT_PACKET WHEN EXISTS == 0
+	struct chatrooms *r;
+	struct node *temp, *temp2;
+
+	if (mess_type == 5 && c->sequence <= vector[atoi(server)][c->server_id]) {
+		// Do not process this packet because it came from a membership change but we already have this packet
+		return;
+	}
+	/* If like message, process it as a like */
+	if (c->type == 1) {
+		printf("Received like for message: %d\n", c->lts);
+		recv_server_like(c, mess_type);
+		return;
+	}
+        printf("Received text: %s\n", c->text);
+   	/* Check to make sure we don't already have it */
+	if (c->sequence > vector[atoi(server)][c->server_id] || mess_type == 5) {
+		/*Update vector and lsequence*/
+		if (c->sequence > vector[atoi(server)][c->server_id]) {
+			vector[atoi(server)][c->server_id] = c->sequence;
+		}
+		if (c->sequence > (lsequence * 10)) {
+			lsequence = c->sequence / 10;
+		}
+	        Last_packets[c->server_id - 1]->next = malloc(sizeof(struct node));
+	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
+	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
+		// find the correct group (chatroom)
 	        r = chatroomhead;
 	        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
 	        {
@@ -267,14 +403,21 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 	          r->tail = r->head;
 	          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
 	        }
+		// find the correct spot to place the new message in the linked list. If a placeholder for the message is found then put it in there.
 		temp = r->head;
 		while (temp->next != NULL) {
 			if (c->sequence < temp->next->data->sequence) {
 				temp2 = temp->next;
 				temp->next = malloc(sizeof(struct node));
 				temp->next->data = malloc(sizeof(struct chat_packet));
+				temp->next->likes = malloc(sizeof(struct likes));
+				temp->next->exists = 1;
 				memcpy(temp->next->data, c, sizeof(struct chat_packet));
 				temp->next->next = temp2;
+				break;
+			} else if (c->sequence == temp->next->data->sequence && temp->next->exists == 0) {
+				temp->next->exists = 1;
+				memcpy(temp->next->data, c, sizeof(struct chat_packet));
 				break;
 			}
 			temp = temp->next;
@@ -284,19 +427,15 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 			r->tail->next = malloc(sizeof(struct node));
 			r->tail = r->tail->next;
 			r->tail->data = malloc(sizeof(struct chat_packet));
+			r->tail->likes = malloc(sizeof(struct likes));
+			r->tail->exists = 1;
 			memcpy(r->tail->data, c, sizeof(struct chat_packet));
 		}
 	
 	        write_data();
 	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
-	        strcat(c->group, server); /*Append server id for server's group */
-	        printf("Sending text to group %s\n", c->group);
 	        /* Send the message to the group */
-	        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
-		/*Update vector */
-		if ((c->sequence > vector[atoi(server)][c->server_id])) {
-			vector[atoi(server)][c->server_id] = c->sequence;
-		}
+	        send_liked_msg(temp->next, 0);
 	}
 	else
 	{
