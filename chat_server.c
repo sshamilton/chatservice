@@ -24,6 +24,7 @@ void send_vector();
 void recv_client_msg();
 void write_data();
 void memb_change();
+void showmatrix(int rvector[][6]);
 /* Message Types */
 /* 0 - Display chat text */
 /* 1 - Like message */
@@ -118,12 +119,20 @@ void read_disk() {
     if (vector[c_temp->server_id][Last_packets[i]->data->server_id] < Last_packets[i]->data->sequence)
     {
       vector[c_temp->server_id][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
+	printf("Updated vector %d %d to %d\n", c_temp->server_id, Last_packets[i]->data->server_id, Last_packets[i]->data->sequence);
     }
+    if (vector[atoi(server)][Last_packets[i]->data->server_id] < Last_packets[i]->data->sequence)
+    {
+      vector[atoi(server)][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
+        printf("Updated vector %d %d to %d\n", c_temp->server_id, Last_packets[i]->data->server_id, Last_packets[i]->data->sequence);
+    }
+
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
   }
-
+  printf("Vector after load:\n");
+  showmatrix((int(*) [6]) vector); 
   r = chatroomhead;
   /* Loop for likes. Can make more efficient by doing this in the previous loop */
   for (i = 0; i < 5; i++) {

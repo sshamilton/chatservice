@@ -139,10 +139,17 @@ void join_server(char *server_id)
         c->server_id = atoi(server_id);
 	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
         /* Send Message */
+	if (connected > 0)
+	{
+	  /*Leave current group*/
+	  sprintf(group, "c%d", connected);
+	  SP_leave(Mbox, group);
+	}
         /* ret = SP_multicast(Mbox, AGREED_MESS, server_id, 2, sizeof(struct chat_packet), (char *)c); */
 	/* That was the old way.  New way is join the server group */
 	sprintf(group, "c%d", atoi(server_id));
 	ret = SP_join(Mbox, group);
+	connected = atoi(server_id); /*Set connected.  Note we still need response from server, but we need to pass this to the recv connect */
         if( ret < 0 )
         {
                 SP_error( ret );
@@ -427,7 +434,7 @@ static  char             mess[MAX_MESSLEN];
         int16            mess_type;
         int              endian_mismatch;
         int              i,j;
-        int              ret;
+        int              ret, success =0;
 	char		 server_group[1];
 
         service_type = 0;
@@ -494,11 +501,13 @@ if     ( Is_reg_memb_mess( service_type ) )
 			    if (target_groups[i][1] == server_group[1])
 			    {
 				printf("Successfully connected to server %d\n", connected);
+				success = 1;
 			    }
-			    else 
-			    {
-				printf("Compared %s with %s\n", target_groups[i][1], server_group[1]);
-			    }
+			  }
+			  if (!success)
+			  {
+				printf("Server unavailable.  Please try again later.\n");
+				SP_leave(Mbox, sender);
 			  }
 			}
                         if( Is_caused_join_mess( service_type ) )
@@ -511,6 +520,15 @@ if     ( Is_reg_memb_mess( service_type ) )
 			        if (strncmp(sender, server_group, 2) == 0 && memb_info.changed_member[1] == server_group[1])
 				{
 				  printf("Disconnected from server %s\n", server_group);
+				  SP_leave(Mbox, sender); /*Disconnect us from the server group */
+				  if (chatroom != NULL)
+				  {
+				    sprintf(chatroom, "%s%d",chatroom, connected);
+				    SP_leave(Mbox, chatroom);
+				    chatroom[0]='\0';
+				    chatroom_start = malloc(sizeof(struct node));
+				  }
+				  connected = 0; /*we are no longer connected */
 				}
                         }else if( Is_caused_network_mess( service_type ) ){
                                 printf("Due to NETWORK change with %u VS sets\n", memb_info.num_vs_sets);
