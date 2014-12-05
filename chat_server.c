@@ -681,6 +681,8 @@ void recv_client_msg(struct chat_packet *c) {
 	    strcat(c->text, text);
 	  }
 	}
+	/*trim trailing comma */
+	c->text[strlen(c->text)-2]='\0';
 	/* Send the string to the client */
 	ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
    }
@@ -994,7 +996,10 @@ void main(int argc, char **argv)
   ret = SP_join(Mbox, "Servers"); 
   printf("Join group %d return:%d\n", server, ret);
   if (ret != 0) SP_error( ret );
-
+  /* Join our connection group for client awareness*/
+  sprintf(group, "c%s", argv[1]);
+  ret = SP_join(Mbox, group);
+  if (ret != 0) SP_error( ret );
   // For clearing the data structure before use.
   for (i = 0; i < 5; i++) {
     Server_packets[i].data = NULL;

@@ -139,7 +139,10 @@ void join_server(char *server_id)
         c->server_id = atoi(server_id);
 	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
         /* Send Message */
-        ret = SP_multicast(Mbox, AGREED_MESS, server_id, 2, sizeof(struct chat_packet), (char *)c);
+        /* ret = SP_multicast(Mbox, AGREED_MESS, server_id, 2, sizeof(struct chat_packet), (char *)c); */
+	/* That was the old way.  New way is join the server group */
+	sprintf(group, "c%d", atoi(server_id));
+	ret = SP_join(Mbox, group);
         if( ret < 0 )
         {
                 SP_error( ret );
@@ -425,6 +428,7 @@ static  char             mess[MAX_MESSLEN];
         int              endian_mismatch;
         int              i,j;
         int              ret;
+	char		 server_group[1];
 
         service_type = 0;
 
@@ -481,7 +485,22 @@ if     ( Is_reg_memb_mess( service_type ) )
                         for( i=0; i < num_groups; i++ )
                                 printf("\t%s\n", &target_groups[i][0] );
                         printf("grp id is %d %d %d\n",memb_info.gid.id[0], memb_info.gid.id[1], memb_info.gid.id[2] );
-
+			sprintf(server_group, "c%d", connected);
+			if (strncmp(sender, server_group, 2) == 0)
+			{
+			  printf("Server connection message\n");
+			  for (i=0; i< num_groups; i++)
+			  {
+			    if (target_groups[i][1] == server_group[1])
+			    {
+				printf("Successfully connected to server %d\n", connected);
+			    }
+			    else 
+			    {
+				printf("Compared %s with %s\n", target_groups[i][1], server_group[1]);
+			    }
+			  }
+			}
                         if( Is_caused_join_mess( service_type ) )
                         {
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
@@ -489,6 +508,10 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 printf("Due to the LEAVE of %s\n", memb_info.changed_member );
                         }else if( Is_caused_disconnect_mess( service_type ) ){
                                 printf("Due to the DISCONNECT of %s\n", memb_info.changed_member );
+			        if (strncmp(sender, server_group, 2) == 0 && memb_info.changed_member[1] == server_group[1])
+				{
+				  printf("Disconnected from server %s\n", server_group);
+				}
                         }else if( Is_caused_network_mess( service_type ) ){
                                 printf("Due to NETWORK change with %u VS sets\n", memb_info.num_vs_sets);
                                 num_vs_sets = SP_get_vs_sets_info( mess, &vssets[0], MAX_VSSETS, &my_vsset_index );
