@@ -329,7 +329,7 @@ static	void	User_command()
 }
 void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    int ret;
-   struct node *temp;
+   struct node *temp, *temp2;
    //printf("Got packet type %d\n", c->type);
    if (mess_type == 5) { // If the mess_type is 5, that means we already have the chat_packet, we just want to update the likes.
 	temp = chatroom_start->next;
@@ -343,8 +343,18 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    }
    else if (mess_type == 13) {
 	temp = chatroom_start;
+	/* We need to put the merged chats in the correct order */
 	while (temp->next != NULL) {
-	  if (c->sequence < temp->next->data->sequence);// FINISH 
+	  if (c->sequence < temp->next->data->sequence)
+	  {
+	     temp2 = temp->next;
+             temp->next = malloc(sizeof(struct node));
+             temp->next->data = malloc(sizeof(struct chat_packet));
+             memcpy(temp->next->data, c, sizeof(struct chat_packet));
+	     temp->next->next = temp2;
+	     break;
+	  }
+    	  temp = temp->next;
 	}
    }
    else if (c->type == 0 || c->type == 3) /*Message packet */

@@ -901,29 +901,29 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 printf("\t%s\n", &target_groups[i][0] );
                         printf("grp id is %d %d %d\n",memb_info.gid.id[0], memb_info.gid.id[1], memb_info.gid.id[2] );
 
+			if (strncmp(sender, "Servers", 7)==0)
+                            {
+                                servers_available = num_groups;  /*To determine how many servers to update */
+                                printf("Running membership change\n");
+                                /*Update servers online*/
+                                /*Clear out array */
+                                for (i=0; i< 7; i++)
+                                {
+                                    servers_online[i] = 0;
+                                }
+                                printf("Serv online...numgrp=%d\n", num_groups);
+                                for (i=0; i < num_groups; i++)
+                                {  printf("Server %c online\n", target_groups[i][1] );
+                                  servers_online[atoi(&target_groups[i][1])] = 1;
+                                }
+                                memb_change();
+                            }
+
                         if( Is_caused_join_mess( service_type ) )
                         {
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
                                 // Deal with join of new member by joining the member's
                                 // private 
-                            if (strncmp(sender, "Servers", 7)==0)
-			    {
-				servers_available = num_groups;  /*To determine how many servers to update */
-				printf("Running membership change\n");
-				/*Update servers online*/
-				/*Clear out array */
-				for (i=0; i< 7; i++)
-			        {
-				    servers_online[i] = 0;
-  				}
-				printf("Serv online...numgrp=%d\n", num_groups);
-				for (i=0; i < num_groups; i++)
-				{  printf("Server %c online\n", target_groups[i][1] );
-				  servers_online[atoi(&target_groups[i][1])] = 1;
-				}
-				memb_change();
-			    }
-
                         }else if( Is_caused_leave_mess( service_type ) ){
                                 printf("Due to the LEAVE of %s\n", memb_info.changed_member );
                         }else if( Is_caused_disconnect_mess( service_type ) ){
