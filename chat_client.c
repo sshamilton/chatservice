@@ -35,7 +35,7 @@ void show_menu()
 	printf("\t? Display this menu\n");
 	printf("\n");
 	printf("\tq -- quit\n");
-        printf(">");
+        printf("> ");
 	fflush(stdout);
 }
 
@@ -79,7 +79,7 @@ sprintf(server_group, "%d", connected); /*Convert server id to string for spread
 		}
 	}
 }
-void like_msg(int like)
+void like_msg(int like, int ul)
 {
 	int ret;
 	struct chat_packet *c = malloc(sizeof(struct chat_packet));
@@ -107,6 +107,7 @@ void like_msg(int like)
           }
        
 }
+
 void join_server(char *server_id)
 {
 	int ret;
@@ -162,7 +163,7 @@ void join_room(char *group)
 	printf("leaving chatroom, %s\n", chatroom);
 	SP_leave(Mbox, chatroom);
   }
-  printf("chatroom length = %d", strlen(chatroom));
+  printf("chatroom length = %d\n", strlen(chatroom));
   /* Send request to server to join a group */
   strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
   strncpy(c->group, group, strlen(group));
@@ -191,7 +192,7 @@ void print_history()
 	likes++;
 	i= i->next;
       }
-      printf("%d: %s (%u likes)\n", t->sequence, t->next->data->text, likes);
+      printf("%d: %s (%u likes)\n", t->next->sequence, t->next->data->text, likes);
       t = t->next;
       likes = 0;
     }
@@ -244,7 +245,7 @@ static	void	User_command()
 			ret = sscanf( &command[2], "%s", group );
 			if( ret < 1 ) 
 			{
-				printf(" invalid chatroom \n>");
+				printf(" invalid chatroom \n> ");
 				break;
 			}
 			join_room(group);
@@ -253,7 +254,7 @@ static	void	User_command()
 			ret = sscanf( &command[2], "%s", group );
                         if( ret < 1 )
                         {
-                                printf(" invalid server id \n>");
+                                printf(" invalid server id \n> ");
                                 break;
                         }
 		  	join_server(group);
@@ -269,19 +270,19 @@ static	void	User_command()
 			ret = sscanf( &command[2], "%s", username);
 			if( ret < 1 )
 			{
-				printf(" Invalid Username\n>");
+				printf(" Invalid Username\n> ");
 				break;
 			}
 			else
 			{
-				printf("Username set to %s\n>", username);
+				printf("Username set to %s\n> ", username);
 			}
 			break;
  		case 'a':
 			strncpy(mtext, &command[2], 130);
 			if( strlen(mtext) < 1)
 			{
-				printf(" invalid message\n>");
+				printf(" invalid message\n> ");
 				break;
 			}
 			send_msg(mtext);
@@ -290,19 +291,29 @@ static	void	User_command()
 			ret = sscanf( &command[2], "%d", &like  );
                         if( ret < 1)
                         {
-                                printf(" invalid line\n>");
+                                printf(" invalid line\n> ");
                                 break;
                         }
-                        like_msg(like);
+                        like_msg(like, 1);
+			break;
+		case 'r':
+			ret = sscanf( &command[2], "%d", &like);
+			if (ret < 1)
+			{
+				printf(" invalid line\n> ");
+				break;
+			}
+			like_msg(like, 0);
 			break;
 		case 'h':
 			print_history();
+    			printf("> ");
 			break;
 		case 'v':
 			show_servers();
 			break;
 		default: 
-			printf(">");
+			printf("> ");
 			break;
     }
    fflush(stdout); 

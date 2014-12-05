@@ -21,7 +21,6 @@ static  int	vectors_received = 0;
 
 void read_disk();
 void send_vector();
-void recv_update();
 void recv_client_msg();
 void write_data();
 void memb_change();
@@ -41,7 +40,7 @@ void memb_change();
  * 2. Restore the vector.
  */
 void read_disk() {
-  int                 i, foundroom =0;
+  int i, foundroom =0, max =0;
   struct chat_packet *c_temp;
   c_temp = malloc(sizeof(struct chat_packet));
   struct chatrooms *rooms;
@@ -62,7 +61,8 @@ void read_disk() {
 
     // memcpy the read data into the newly allocated memory for the next node.
     memcpy(Last_packets[i]->data, c_temp, sizeof(struct chat_packet));
-
+    /* If sequence is higher, update our max*/
+    if (c_temp->sequence > max) max = c_temp->sequence;
     while (rooms->next != NULL)
     {
        rooms = rooms->next;
@@ -102,14 +102,17 @@ void read_disk() {
 	memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
     }
     /* Update our LTS vector */
-    vector[atoi(server)][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
+    if (vector[c_temp->server_id][Last_packets[i]->data->server_id] < Last_packets[i]->data->sequence)
+    {
+      vector[c_temp->server_id][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
+    }
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
     rooms = chatroomhead;
   }
     /*Update our LTS */
-    lsequence = (Last_packets[atoi(server)]->sequence - atoi(server))/10;
+    lsequence = (max)/10;
     printf("Setting our LTS sequence to %d\n", lsequence);
     /*For debugging list chatrooms, and chats  loaded*/
     printf("Loaded from disk:\n");
@@ -130,55 +133,19 @@ void read_disk() {
     }
   
 }
- 
-/*void send_vector() {
-        int ret;
-        // Send the vector multicasted to the server group.
-        if (SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct vector), (const char *) Vector) < 0) {
-                printf
-        }
-}*/
-void recv_text(struct chat_packet *c){
-/*Received text message*/
-        struct chatrooms *r;
-        printf("Received text: %s\n", c->text);
-        lsequence++;
-        c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
-        Last_packets[atoi(server)]->next = malloc(sizeof(struct node));
-        Last_packets[atoi(server)]->next->data = malloc(sizeof(struct chat_packet));
-        memcpy(Last_packets[atoi(server)]->next->data, c, sizeof(struct chat_packet));
-        r = chatroomhead;
-        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
-        {
-          r = r->next;
-        }
-	r->tail->next = malloc(sizeof(struct node));
-	r->tail->next->data = malloc(sizeof(struct chat_packet));
-	memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
-	r->tail = r->tail->next;
 
-        write_data();
-        Last_packets[atoi(server)] = Last_packets[atoi(server)]->next; /* Move pointer */
-        strcat(c->group, server); /*Append server id for server's group */
-        printf("Sending text to group %s\n", c->group);
-        /* Send the message to the group */
-        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
-	/* Send message to servers */
-	c->group[strlen(c->group) -1] = '\0'; /*Remove the trailing server id*/
-	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
-
-}
-
-void recv_server_msg(struct chat_packet *c){
+void recv_like(struct chat_packet *c) {
 	struct chatrooms *r;
-        printf("Received text: %s\n", c->text);
-   	/* Check to make sure we don't already have it */
-    if (c->sequence > Last_packets[c->server_id]->sequence) {
-        lsequence++;
-        Last_packets[c->server_id]->next = malloc(sizeof(struct node));
-        Last_packets[c->server_id]->next->data = malloc(sizeof(struct chat_packet));
-        memcpy(Last_packets[c->server_id]->next->data, c, sizeof(struct chat_packet));
+	struct node	 *temp;
+	struct likes	 *l;
+	lsequence++;
+	c->sequence = lsequence*10 + atoi(server);
+        Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
+        Last_packets[atoi(server) - 1]->next->data = malloc(sizeof(struct chat_packet));
+        memcpy(Last_packets[atoi(server) - 1]->next->data, c, sizeof(struct chat_packet));
+
         r = chatroomhead;
+	// Find the correct group.
         while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
         {
           r = r->next;
@@ -191,6 +158,23 @@ void recv_server_msg(struct chat_packet *c){
           r->tail = r->head;
           strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
         }
+
+	temp = r->head->next;
+	while (temp != NULL) {
+		if (c->sequence == temp->next->data->sequence) {
+			l = temp->next->likes;
+			while (l->next != NULL) {
+				if (l->next ==
+			}
+
+			if (l->next == NULL) {
+				
+			}
+			break;
+		}
+		temp = temp->next;
+	}
+
         r->tail->next = malloc(sizeof(struct node));
         r->tail->next->data = malloc(sizeof(struct chat_packet));
         memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
@@ -204,11 +188,104 @@ void recv_server_msg(struct chat_packet *c){
         SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
 	/*Update vector */
 	vector[atoi(server)][c->server_id] = c->sequence;
-     }
-     else 
-     {
-        printf("Packet received already.\n");
-     }
+	
+
+}
+ 
+void recv_text(struct chat_packet *c) {
+/*Received text message*/
+        struct chatrooms *r;
+        printf("Received text: %s\n", c->text);
+        lsequence++;
+        c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
+
+	/* Insert into the array-linkedlist data structure */
+        Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
+        Last_packets[atoi(server) - 1]->next->data = malloc(sizeof(struct chat_packet));
+        memcpy(Last_packets[atoi(server) - 1]->next->data, c, sizeof(struct chat_packet));
+
+	/* Insert into the chatrooms data structure */
+        r = chatroomhead;
+        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+        {
+          r = r->next;
+        }
+	r->tail->next = malloc(sizeof(struct node));
+	r->tail->next->data = malloc(sizeof(struct chat_packet));
+	r->tail->likes = malloc(sizeof(struct likes));
+	memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
+	r->tail = r->tail->next;
+
+        write_data();
+        Last_packets[atoi(server) - 1] = Last_packets[atoi(server) - 1]->next; /* Move pointer */
+        strcat(c->group, server); /*Append server id for server's group */
+        printf("Sending text to group %s\n", c->group);
+        /* Send the message to the group */
+        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+	/* Send message to servers */
+	c->group[strlen(c->group) - 1] = '\0'; /*Remove the trailing server id*/
+	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
+
+}
+
+void recv_server_msg(struct chat_packet *c, int16 mess_type){
+	struct chatrooms *r;
+	struct node *temp, *temp2;
+        printf("Received text: %s\n", c->text);
+   	/* Check to make sure we don't already have it */
+	if (c->sequence > vector[atoi(server)][c->server_id] || mess_type == 5) {
+	        lsequence++;
+	        Last_packets[c->server_id - 1]->next = malloc(sizeof(struct node));
+	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
+	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
+	        r = chatroomhead;
+	        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+	        {
+	          r = r->next;
+	        }
+		if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+	        {
+	          r->next = malloc(sizeof(struct chatrooms));
+	          r = r->next;
+	          r->head = malloc(sizeof(struct node));
+	          r->tail = r->head;
+	          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
+	        }
+		temp = r->head;
+		while (temp->next != NULL) {
+			if (c->sequence < temp->next->data->sequence) {
+				temp2 = temp->next;
+				temp->next = malloc(sizeof(struct node));
+				temp->next->data = malloc(sizeof(struct chat_packet));
+				memcpy(temp->next->data, c, sizeof(struct chat_packet));
+				temp->next->next = temp2;
+				break;
+			}
+			temp = temp->next;
+		}
+	
+		if (temp->next == NULL) {
+			r->tail->next = malloc(sizeof(struct node));
+			r->tail = r->tail->next;
+			r->tail->data = malloc(sizeof(struct chat_packet));
+			memcpy(r->tail->data, c, sizeof(struct chat_packet));
+		}
+	
+	        write_data();
+	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
+	        strcat(c->group, server); /*Append server id for server's group */
+	        printf("Sending text to group %s\n", c->group);
+	        /* Send the message to the group */
+	        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+		/*Update vector */
+		if ((c->sequence > vector[atoi(server)][c->server_id])) {
+			vector[atoi(server)][c->server_id] = c->sequence;
+		}
+	}
+	else
+	{
+		printf("Packet received already.\n");
+	}
 
 }
 
@@ -255,9 +332,13 @@ void recv_join_msg(struct chat_packet *c) {
 void recv_client_msg(struct chat_packet *c) {
    int ret;
    printf("Got packet type %d\n", c->type);
-   if (c->type == 0 || c->type == 1)
+   if (c->type == 0)
    {
 	recv_text(c);
+   }
+   else if (c->type == 1)
+   {
+	recv_like(c);
    }
    else if (c->type == 2)
    {
@@ -278,90 +359,87 @@ void recv_client_msg(struct chat_packet *c) {
 
 void send_all_after(int min, int c)
 {
- /*Send all after LTS here */
- int ret;
- struct node *i;
- i = &Server_packets[c];
- i = i->next; /*Head is null */
- if (i != NULL && min < 10) /* Advance to first LTS */
- {
-   min = i->sequence;
- }
-    printf("Send lts %d, for server %d", min, c);
-  
-    while (i != NULL && i->sequence < min) 
-    {
-      i=i->next;
-    }
-    while (i != NULL)
-    {
-      printf("Sending packet with LTS:%d", i->sequence);
-      SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) i->data);
-      if (ret < 0)
-        {
-                SP_error( ret );
-        }
-      i = i->next;
-    }
-  
+	/*Send all after LTS here */
+	int ret;
+	struct node *i;
+	i = Server_packets[c - 1].next;
+	printf("Send lts %d, for server %d\n", min, c);
+	
+	while (i != NULL) {
+		if (i->data->sequence > min) {
+	   	    printf("Sending packet with LTS:%d\n", i->data->sequence);
+	 	    ret = SP_multicast(Mbox, AGREED_MESS, "Servers", 5, sizeof(struct chat_packet), (const char *) i->data);
+
+	   	    if (ret < 0) {
+			SP_error( ret );
+		    }
+		}
+		i = i->next;
+	} 
 }
 
 void showmatrix(int rvector[][6])
 {
-int i, j;
-for (i=1; i<6; i++)
-{
-  for (j=1; j<6; j++)
-  {
-   printf("|%d|", rvector[i][j]);
-   if (rvector[i][j] > vector[i][j]) vector[i][j] = rvector[i][j];
-  }
- printf("\n");
-}
-
+	int i, j;
+	for (i=1; i<6; i++)
+	{
+	  for (j=1; j<6; j++)
+	  {
+	   printf("|%d|", rvector[i][j]);
+	   if (rvector[i][j] > vector[i][j]) vector[i][j] = rvector[i][j];
+	  }
+	 printf("\n");
+	}
+	
 }
 
 
 void recv_update(int rvector[][6]) {
-int max, min, c, i, j;
-printf("Recevied vector\n");
-showmatrix((int(*) [6]) rvector);
-
-/*Determine if we have recevied all the updates */
-vectors_received++;
-printf("Comparing vrec %d with serv-avail %d\n", vectors_received, servers_available-1);
-if (vectors_received == servers_available -1) /*We got all the updates */
-{
-   /*Reset vector count */
-   vectors_received = 0;
-   printf("Got all updates after join, checking to see what we need to send\n");
-   printf("Current matrix:\n");
-
-   showmatrix((int(*) [6]) vector);
-
-   for (i = 1; i<6; i++)
-   {
-     max=0;
-     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d", min);
-     for (j=1; j<6; j++)
-     {
-	if (vector[j][i] > max)
+	int max, min, c, i, j, s;
+	printf("Recevied vector\n");
+	showmatrix((int(*) [6]) rvector);
+	
+	/*Determine if we have recevied all the updates */
+	vectors_received++;
+	printf("Comparing vrec %d with serv-avail %d\n", vectors_received, servers_available-1);
+	if (vectors_received == servers_available -1) /*We got all the updates */
 	{
-	   max = vector[j][i];
-	   c = j;
+	   /*Reset vector count */
+	   vectors_received = 0;
+	   printf("Got all updates after join, checking to see what we need to send\n");
+	   printf("Current matrix:\n");
+	
+	   showmatrix((int(*) [6]) vector);
+	
+	   for (i = 1; i<6; i++)
+	   {
+	     max=0;
+	     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d ", min);
+	     for (j=1; j<6; j++)
+	     {
+		if (vector[j][i] > max)
+		{
+		   max = vector[j][i];
+		   c = j;
+		   printf("Max: %d ", max);
+		}
+		if (vector[j][i] < min)
+	        {
+		   min = vector[j][i]; printf("R%d\n", min);
+		   s = j; /* Server who needs it */
+	        }
+	     }
+	
+	     if (c == atoi(server)) /*We have the latest, so send all after min LTS */
+	     {
+		send_all_after(min, i);printf("Sent all after %d for server %d\n", min, s);
+	     }
+	   }
+	
+	 printf("Final vector:\n");
+	 showmatrix((int(*) [6]) vector);
+	
 	}
-	if (vector[j][i] < min)
-        {
-	   min = vector[j][i]; printf("R%d", min);
-        }
-     }
-
-     if (c == atoi(server)) /*We have the latest, so send all after min LTS */
-     {
-	send_all_after(min, c);
-     }
-   }
-}
 
 }
 
@@ -382,7 +460,10 @@ void write_data() {
 }
 
 void memb_change() {
-   vector[atoi(server)][atoi(server)] = lsequence *10 + atoi(server);
+   if (lsequence > 0)
+   {
+     vector[atoi(server)][atoi(server)] = lsequence *10 + atoi(server);
+   }
    /*Send vector*/
    SP_multicast(Mbox, AGREED_MESS, "Servers", 10, sizeof(int)*36, (const char *)vector);
 }
@@ -451,14 +532,14 @@ if (ret < 0 )
 			}
 			else if (strncmp(target_groups[0], "Servers", 7)==0 && (sender[1] != server[0]))
 			{
-			  printf("Recevied message from another server cmp %d %d\n", sender[1], server[0]);
+			  printf("Received message from another server: sender:%c our server:%c\n", sender[1], server[0]);
 			  if (mess_type == 10) /*Vector update */
 			  {
 				recv_update((int(*) [6]) mess);
 			  }
-			  else
+			  else /* Membership change mode when mess_type is 5 */
 			  {
-			  recv_server_msg((struct chat_packet *) mess);
+			  recv_server_msg((struct chat_packet *) mess, mess_type);
 			  }
 			}
 			else { printf("First group: %s", target_groups[0]);
@@ -475,7 +556,7 @@ if (ret < 0 )
 if     ( Is_reg_memb_mess( service_type ) )
                 {
                         printf("Received REGULAR membership for group %s with %d members, where I am member %d:\n",
-                                sender, num_groups, mess_type );
+                                sender, num_groups, mess_type ); // Figure out what variable goes here
                         for( i=0; i < num_groups; i++ )
                                 printf("\t%s\n", &target_groups[i][0] );
                         printf("grp id is %d %d %d\n",memb_info.gid.id[0], memb_info.gid.id[1], memb_info.gid.id[2] );
