@@ -56,7 +56,7 @@ sprintf(server_group, "%d", connected); /*Convert server id to string for spread
 		strncpy(c->group, chatroom, strlen(chatroom));
 		strncpy(c->name, username, strlen(username));
 		c->sequence = 0; //Server updates this
-		c->resend = 0; //Not sure we need this anymore
+		//c->resend = 0; //Not sure we need this anymore
 		/* Send Message */
 		printf("Sending to group %s\n", server_group);
 		ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
@@ -89,11 +89,13 @@ void like_msg(int like, int ul)
         while (i->sequence != like) (i=i->next);
           if (strlen(chatroom) > 1)
           {
-                c->type = 1;//Chat like type
+		if (ul == 1) {
+                  c->type = 1;//Chat like type
+		} else c->type = 7; // Unlike
                 c->server_id = i->data->server_id;
                 strncpy(c->name, username, strlen(username));
                 strncpy(c->group, chatroom, strlen(chatroom));
-                c->sequence = i->data->sequence; 
+                c->lts = i->data->sequence; 
                 /* Send Message */
                 ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *) c);
                 if( ret < 0 )
@@ -213,7 +215,7 @@ void show_servers()
         strncpy(c->name, username, strlen(username));
         strncpy(c->group, chatroom, strlen(chatroom));
         c->sequence = 0; //Server updates this
-        c->resend = 0; //Not sure we need this anymore
+        //c->resend = 0; //Not sure we need this anymore
         /* Send Message */
         ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
         if( ret < 0 )

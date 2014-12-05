@@ -139,7 +139,7 @@ void recv_like(struct chat_packet *c) {
 	struct node	 *temp;
 	struct likes	 *l;
 	lsequence++;
-	c->sequence = lsequence*10 + atoi(server);
+	c->sequence = lsequence*10 + atoi(server); // give the like package a sequence.
         Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
         Last_packets[atoi(server) - 1]->next->data = malloc(sizeof(struct chat_packet));
         memcpy(Last_packets[atoi(server) - 1]->next->data, c, sizeof(struct chat_packet));
@@ -161,14 +161,30 @@ void recv_like(struct chat_packet *c) {
 
 	temp = r->head->next;
 	while (temp != NULL) {
-		if (c->sequence == temp->next->data->sequence) {
-			l = temp->next->likes;
+		if (c->lts == temp->data->sequence) {
+			l = temp->likes;
 			while (l->next != NULL) {
-				if (l->next ==
+			  if (strncmp(l->next->name, c->name, strlen(c->name)) == 0) {
+				if (c->type == 7) {
+				  l->next->like = 0;
+				} else {
+				  l->next->like = 1;
+				}
+				l->next->like_timestamp = c->sequence;
+			  }
+			  l = l->next;
 			}
 
 			if (l->next == NULL) {
-				
+			  l->next = malloc(sizeof(struct likes));
+			  l = l->next;
+			  if (c->type == 7) {
+			    l->like = 0;
+			  } else {
+			    l->like = 1;
+			  }
+			  l->like_timestamp = c->sequence;
+			  strcpy(l->name, c->name);
 			}
 			break;
 		}
@@ -336,7 +352,7 @@ void recv_client_msg(struct chat_packet *c) {
    {
 	recv_text(c);
    }
-   else if (c->type == 1)
+   else if (c->type == 1 || c->type == 7) /* 7 means unlike, 1 means like */
    {
 	recv_like(c);
    }

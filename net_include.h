@@ -18,7 +18,9 @@
 
 struct likes {
   char name[25];
+  int like;
   struct likes *next;
+  int like_timestamp; // Used to store the highest timestamped "like/unlike" received for this message.
 };
 
 struct chat_packet {
@@ -30,7 +32,7 @@ struct chat_packet {
   char text[80]; //Text of chat message
   struct likes likes; //Integer of sequence number of message liked
   char client_group[MAX_GROUP_NAME]; //Used to ID client private group so server can respond
-  int resend;
+  int lts;
 };
 
 
@@ -49,5 +51,6 @@ struct chatrooms {
 struct node {
   struct chat_packet* data;
   struct node*        next;
+  struct likes*	      likes;
   int    sequence; /*Client line sequence number */
 };
