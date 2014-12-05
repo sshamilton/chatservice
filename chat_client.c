@@ -191,7 +191,7 @@ void print_history()
   {
     while (t->next != NULL)
     {
-      printf("%d: %s (%u likes)\n", t->next->sequence, t->next->data->text, t->next->data->num_likes);
+    printf("%d: %s>%s (%u likes)LTS:%d\n", t->next->sequence, t->next->data->name, t->next->data->text, t->next->data->num_likes, t->next->data->sequence);
       t = t->next;
 	    }
 	  } 
@@ -205,15 +205,16 @@ void show_servers()
 {
 	int ret;
         struct chat_packet *c;
+	char server_group[1];
         c = malloc(sizeof(struct chat_packet));
-	c->type = 1;//Chat like type
+	c->type = 8;//Request online server list.
         c->server_id = connected;
         strncpy(c->name, username, strlen(username));
-        strncpy(c->group, chatroom, strlen(chatroom));
+	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
+	sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
         c->sequence = 0; //Server updates this
-        //c->resend = 0; //Not sure we need this anymore
         /* Send Message */
-        ret = SP_multicast(Mbox, AGREED_MESS, chatroom, 2, sizeof(struct chat_packet), (char *) c);
+        ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *) c);
         if( ret < 0 )
         {
                 SP_error( ret );
@@ -400,6 +401,10 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	line_number++;
 	printf("%d:%s> %s",line_number, i->data->name, i->data->text);
     }
+   }
+   else if (c->type = 8) /*Display servers online */
+   {
+	printf("Servers that are online are: %s", c->text);
    }
 
 }

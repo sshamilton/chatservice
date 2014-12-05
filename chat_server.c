@@ -18,7 +18,7 @@ static  int    lsequence = 0;
 static struct chatrooms* chatroomhead;
 static  int    servers_available = 0;
 static  int	vectors_received = 0;
-
+static  int servers_online[6];
 void read_disk();
 void send_vector();
 void recv_client_msg();
@@ -32,6 +32,8 @@ void memb_change();
 /* 4 - Display all lines in chatroom after given lamport timestamp */
 /* 5 - Request to joing group */
 /* 6 - Refresh client screen */
+/* 7 - Unlike message */
+/* 8 - Display servers online */
 
 /*
  * Read disk is used for recovering from crashes. Things to do:
@@ -46,10 +48,10 @@ void read_disk() {
   struct chatrooms *rooms, *r;
   struct node *temp, *temp2, *temp3;
   c_temp = malloc(sizeof(struct chat_packet));
-  rooms = r = chatroomhead;
   while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
+    rooms = chatroomhead;
     i = c_temp->server_id - 1;
-
+    printf("Loaded message: %s, room: %s\n", c_temp->text, c_temp->group);
     // Allocate memory for the next node.
     Last_packets[i]->next = (struct node *) malloc(sizeof(struct node));
 
@@ -73,7 +75,7 @@ void read_disk() {
 	       if (strncmp(rooms->name, c_temp->group, strlen(c_temp->group)) == 0)
 		{
 		  /*chatroom exists*/
-		  foundroom = 1;
+		  foundroom = 1; printf("Found chatroom %s\n", rooms->name);
 		  break;
 		}
 	    }
@@ -84,10 +86,12 @@ void read_disk() {
 	       rooms->head = malloc(sizeof(struct node));
 	       strncpy(rooms->name, c_temp->group, strlen(c_temp->group));
 	       rooms->tail = rooms->head;
+	       printf("Created chatroom %s", rooms->name);
 	    }
-	
-	    temp = rooms->head;
-	    while (temp->next != NULL) {
+            foundroom = 0; /*Reset found room for next iteration */	
+	    temp = rooms->head; /* Go to first chat in chatroom */
+	   printf("Adding %d to room: %s\n", c_temp->sequence, rooms->name);
+	    while (temp->next != NULL) { /*Search for correct placement of the message.  This provides correct ordering */
 	       if (c_temp->sequence < temp->next->data->sequence) {
 		 temp2 = temp->next;
 		 temp->next = malloc(sizeof(struct node));
@@ -118,9 +122,9 @@ void read_disk() {
     // Clear the new node's next pointer for safety.
     Last_packets[i]->next = NULL;
 
-    rooms = chatroomhead;
   }
 
+  r = chatroomhead;
   /* Loop for likes. Can make more efficient by doing this in the previous loop */
   for (i = 0; i < 5; i++) {
     temp3 = &Server_packets[i];
@@ -220,7 +224,6 @@ void read_disk() {
 
       }
       temp3 = temp3->next;
-      r = chatroomhead;
     }	
   }
 
@@ -249,7 +252,7 @@ void read_disk() {
 
 void send_liked_msg(struct node *msg, int received) { // The received field says whether the clients already have this chat_packet.
 	struct chat_packet temp;
-	struct likes *l = msg->likes->next;;
+	struct likes *l = msg->likes->next;
 	memcpy(&temp, msg->data, sizeof(struct chat_packet));
         strcat(temp.group, server); /*Append server id for server's group */
 	/*count likes */
@@ -515,6 +518,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
         printf("Received text: %s\n", c->text);
    	/* Check to make sure we don't already have it */
 	if (c->sequence > vector[atoi(server)][c->server_id] || mess_type == 5) {
+		printf("Adding message %d, because our vetor is %d\n", c->sequence, vector[atoi(server)][c->server_id]);
 		/*Update vector and lsequence*/
 		if (c->sequence > vector[atoi(server)][c->server_id]) {
 			vector[atoi(server)][c->server_id] = c->sequence;
@@ -543,6 +547,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 		temp = r->head;
 		while (temp->next != NULL) {
 			if (c->sequence < temp->next->data->sequence) {
+				/*stitching */
 				temp2 = temp->next;
 				temp->next = malloc(sizeof(struct node));
 				temp->next->data = malloc(sizeof(struct chat_packet));
@@ -559,13 +564,16 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 			temp = temp->next;
 		}
 	
-		if (temp->next == NULL) {
+		if (temp->next == NULL) { /*Latest in sequence, put at end of list */
 			r->tail->next = malloc(sizeof(struct node));
 			r->tail = r->tail->next;
 			r->tail->data = malloc(sizeof(struct chat_packet));
 			r->tail->likes = malloc(sizeof(struct likes));
 			r->tail->exists = 1;
 			memcpy(r->tail->data, c, sizeof(struct chat_packet));
+			/* For sending below, set temp->next, since it is null */
+			printf("Setting temp next\n");
+			temp->next = r->tail;
 		}
 	
 	        write_data();
@@ -660,6 +668,21 @@ void recv_client_msg(struct chat_packet *c) {
    {
 	recv_join_msg(c);
 
+   }
+   else if (c->type == 8) /* Request to view online servers */
+   {
+	int i;
+	char text[3];
+	for (i=1; i < 6; i++) 
+	{
+	  if (servers_online[i])
+	  {
+	    sprintf(text, "%d, ", i);
+	    strcat(c->text, text);
+	  }
+	}
+	/* Send the string to the client */
+	ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
    }
 }
 
@@ -876,6 +899,17 @@ if     ( Is_reg_memb_mess( service_type ) )
 			    {
 				servers_available = num_groups;  /*To determine how many servers to update */
 				printf("Running membership change\n");
+				/*Update servers online*/
+				/*Clear out array */
+				for (i=0; i< 7; i++)
+			        {
+				    servers_online[i] = 0;
+  				}
+				printf("Serv online...numgrp=%d\n", num_groups);
+				for (i=0; i < num_groups; i++)
+				{  printf("Server %c online\n", target_groups[i][1] );
+				  servers_online[atoi(&target_groups[i][1])] = 1;
+				}
 				memb_change();
 			    }
 
@@ -942,6 +976,10 @@ void main(int argc, char **argv)
   }
   strncpy(server, argv[1], 1);
   printf("Chat Server %u running\n", server);
+  for (i=0; i< 7; i++)
+  {
+    servers_online[i] = 0;
+  }
   E_init();
   ret = SP_connect_timeout( Spread_name, server, 0, 1, &Mbox, Private_group, test_timeout );
   if( ret != ACCEPT_SESSION ) {
