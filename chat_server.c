@@ -607,6 +607,7 @@ void recv_join_msg(struct chat_packet *c) {
 	/* Add server index to groupname */
 	strncpy(groupname, c->group, strlen(c->group));
         strcat(c->group, server);
+	printf("Sending to client group %s\n", c->client_group);
         ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
         /*send acknowledgement to the client's private group */
         if (ret < 0)
@@ -618,20 +619,39 @@ void recv_join_msg(struct chat_packet *c) {
         struct chatrooms *r;
         struct node *i;
 	struct likes *l;
+	struct names *n;
         r = chatroomhead;
+	char namelist[80];
         while (r->next != NULL && (strncmp(r->name, groupname, strlen(c->group)) != 0))
         {
           r = r->next;
         }
+	
         if (strncmp(r->name, groupname, strlen(groupname)) != 0) /*Chat room doesn't exist*/
         {
           r->next = malloc(sizeof(struct chatrooms));
           r = r->next;
+	  r->names = malloc(sizeof(struct names));
           r->head = malloc(sizeof(struct node));
           r->tail = r->head;
           strncpy(r->name, groupname, strlen(groupname)); /*Copy name to chatroom */
-        }
+	  strncpy(r->names->name, c->name, strlen(c->name)); /*Copy username to chatroom membership */
+          printf("added name: %s\n", r->names->name);
+	}
+	else 
+	{
+	  n = r->names;
+	  /*Tack on username*/
+	  while (n->next != NULL)
+          {
+		n=n->next;
+	  }
+	  n->next = malloc(sizeof(struct names));
+	  n=n->next;
+	  strncpy(n->name, c->name, strlen(c->name)); printf("Tacked on %s\n", c->name);
+	}
         i = r->head->next;
+	n = r->names;
         while (i != NULL)
         {
 	  if (i->exists != 0) {
@@ -648,8 +668,21 @@ void recv_join_msg(struct chat_packet *c) {
           i = i->next;
           
         }
-
-
+	/*Move the following to its own function, then call it on membership join, or update from other server */
+	bzero(namelist, strlen(namelist));
+	while (n != NULL) /*Build membership group name list */ 
+	{
+	  strcat(namelist, n->name);
+	  strcat(namelist, " ");
+	  n = n->next;
+	}
+	/*Send namelist to everyone in chatroom*/
+	strncpy(c->text, namelist, strlen(namelist));
+	c->type = 9;
+	
+        ret = SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) (c));
+        
+	printf("Sent names in chatroom: %s to group %s with return %d\n", c->text, c->group, ret);
 }
 
 void recv_client_msg(struct chat_packet *c) {

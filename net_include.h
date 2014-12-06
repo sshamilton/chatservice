@@ -23,6 +23,11 @@ struct likes {
   int like_timestamp; // Used to store the highest timestamped "like/unlike" received for this message.
 };
 
+struct names {
+  char name[25];
+  struct names *next;
+};
+
 struct chat_packet {
   int type;//Type of packet 0 for message, 1 for like
   int sequence; //Lamport timestamp
@@ -35,12 +40,12 @@ struct chat_packet {
   int num_likes;
 };
 
-
 struct chatrooms {
   char name[25]; //Chat room name
   struct node *head; /* first chat in room */
   struct node *tail; /* Last chat in room */
-  struct chatrooms *next; 
+  struct chatrooms *next;
+  struct names *names; 
 };
 
 

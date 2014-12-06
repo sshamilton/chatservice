@@ -15,6 +15,7 @@ static  char    chatroom[MAX_GROUP_NAME] ="\0";
 static  int     line_number=0;
 static  struct  node* chatroom_start;
 static  struct  node* chatroom_latest;
+static  void    Read_message();
 
 void show_menu()
 {
@@ -137,6 +138,7 @@ void join_server(char *server_id)
 	c->type = 2;//Request to join server
         strncpy(c->text, Private_group, strlen(Private_group));
         c->server_id = atoi(server_id);
+        printf("Sending private grup %s to server", Private_group);
 	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
         /* Send Message */
 	if (connected > 0)
@@ -182,6 +184,8 @@ void join_room(char *group)
   printf("chatroom length = %d\n", strlen(chatroom));
   /* Send request to server to join a group */
   strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
+  strncpy(c->name, username, strlen(username));
+  printf("Sending join with %s", Private_group);
   strncpy(c->group, group, strlen(group));
   c->type = 5;
   ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
@@ -242,6 +246,8 @@ static	void	User_command()
 	int	ret;
 	int	i;
 	int 	like;
+	sp_time test_timeout;
+	char    server_id[1];
 
 	for( i=0; i < sizeof(command); i++ ) command[i] = 0;
 	if( fgets( command, 130, stdin ) == NULL ) 
@@ -285,6 +291,13 @@ static	void	User_command()
 			else
 			{
 				printf("Username set to %s\n> ", username);
+				/*If in chatroom, disconnect */
+				if (strlen(chatroom) > 0)
+  				{
+        				sprintf(chatroom, "%s%d",chatroom, connected);
+        				printf("leaving chatroom, %s due to username change\n", chatroom);
+        				SP_leave(Mbox, chatroom);
+  				} 
 			}
 			break;
  		case 'a':
@@ -330,7 +343,7 @@ static	void	User_command()
 void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    int ret;
    struct node *temp, *temp2;
-   //printf("Got packet type %d\n", c->type);
+   printf("Got packet type %d\n", c->type);
    if (mess_type == 5) { // If the mess_type is 5, that means we already have the chat_packet, we just want to update the likes.
 	temp = chatroom_start->next;
 	while (temp != NULL) {
@@ -422,9 +435,13 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	printf("%d:%s> %s",line_number, i->data->name, i->data->text);
     }
    }
-   else if (c->type = 8) /*Display servers online */
+   else if (c->type == 8) /*Display servers online */
    {
 	printf("Servers that are online are: %s", c->text);
+   }
+   else if (c->type == 9) /*Updated name list for chatroom */
+   {
+	printf("Members in chatroom are now: %s", c->text);
    }
 
 }
@@ -446,6 +463,7 @@ static  char             mess[MAX_MESSLEN];
         int              i,j;
         int              ret, success =0;
 	char		 server_group[1];
+	char		 *uname;
 
         service_type = 0;
 
@@ -519,6 +537,10 @@ if     ( Is_reg_memb_mess( service_type ) )
 				printf("Server unavailable.  Please try again later.\n");
 				SP_leave(Mbox, sender);
 			  }
+			}
+			else
+			{ /*Membership message from chatroom.  Show users in chat */
+			 /*No longer here*/ 
 			}
                         if( Is_caused_join_mess( service_type ) )
                         {
@@ -603,6 +625,8 @@ void main()
   {
     E_handle_events();
     User_command();
+    E_attach_fd( 0, READ_FD, User_command, 0, NULL, LOW_PRIORITY );
+    E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
   }
   exit (0);
 }
