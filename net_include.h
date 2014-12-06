@@ -23,9 +23,15 @@ struct likes {
   int like_timestamp; // Used to store the highest timestamped "like/unlike" received for this message.
 };
 
+struct pnames {
+  char pname[25];
+  int server_id;
+  struct pnames *next;
+};
+
 struct names {
   char name[25];
-  char pname[25];
+  struct pnames *pnames;
   struct names *next;
 };
 
