@@ -1,31 +1,43 @@
 #include "net_include.h"
 /* global variables */
-static  char    User[MAX_PRIVATE_NAME];
-static  char    Spread_name[80];
-static  char    Private_group[MAX_GROUP_NAME];
-static  mailbox Mbox;
-static  int vector[6][6]; 
-static  int     Num_sent;
-static  unsigned int    Previous_len;
-static  int     To_exit = 0;
-static  struct node     Server_packets[5];
+static  char			User[MAX_PRIVATE_NAME];
+static  char			Spread_name[80];
+static  char			Private_group[MAX_GROUP_NAME];
+static  mailbox 		Mbox;
+static  int				vector[6][6]; 
+static  int     		Num_sent;
+static  unsigned int	Previous_len;
+static  int				To_exit = 0;
+static  struct node		Server_packets[5];
 // Essentially the 5 tail nodes of the 5 linked lists.
-static  struct node*    Last_packets[5];
-static  struct node*    Last_written[5];
-static  char	server[1];
-static  FILE   *fp;
-static  int    lsequence = 0;
-static struct chatrooms* chatroomhead;
-static  int    servers_available = 0;
-static  int	vectors_received = 0;
-static  int servers_online[6];
-
+static  struct node		*Last_packets[5];
+static  struct node		*Last_written[5];
+static  char			server[1];
+static  FILE			*fp;
+static  int				lsequence = 0;
+static	struct			chatrooms* chatroomhead;
+static  int				servers_available = 0;
+static  int				vectors_received = 0;
+static  int				servers_online[6];
 void read_disk();
 void send_vector();
 void recv_client_msg();
 void write_data();
 void memb_change();
 void showmatrix(int rvector[][6]);
+
+struct node * empty_chatroom_node();
+// Insert into the array of linked lists.
+void array_ll_insert(struct chat_packet *, int);
+// Insert a text message into the chatroom data structure.
+struct node * chatroom_insert_msg(struct chat_packet *);
+struct node * find_desired_msg(int, struct chatrooms *);
+struct likes * find_user_like(char *, struct likes *);
+// Insert a like message into the chatroom data structure.
+struct node * chatroom_process_like(struct chat_packet *);
+struct chatrooms * create_room(char *, struct chatrooms *);
+struct chatrooms * find_room(char *);
+struct node * find_insert_slot(int, struct chatrooms *);
 /* Message Types */
 /* 0 - Display chat text */
 /* 1 - Like message */
@@ -95,349 +107,132 @@ void rm_user(char *pname, struct names *names)
 }
 
 void read_disk() {
-  int i, foundroom =0, max =0;
-  struct chat_packet *c_temp;
-  struct likes *l;
-  struct chatrooms *rooms, *r;
-  struct node *temp, *temp2, *temp3;
-  c_temp = malloc(sizeof(struct chat_packet));
-  while (fread(c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
-    rooms = chatroomhead;
-    i = c_temp->server_id - 1;
-    printf("Loaded message: %s, room: %s\n", c_temp->text, c_temp->group);
-    // Allocate memory for the next node.
-    Last_packets[i]->next = (struct node *) malloc(sizeof(struct node));
+	int 				i, foundroom =0, max =0;
+	struct chat_packet	c_temp;
+	struct likes 		*l;
+	struct chatrooms	*rooms, *r;
+	struct node			*temp, *temp2, *temp3;
 
-    // Update the pointer to new tail node.
-    Last_packets[i] = Last_packets[i]->next;
-    Last_written[i] = Last_written[i]->next;
+	while (fread(&c_temp, sizeof(struct chat_packet), 1, fp) != 0) {
+		i = c_temp.server_id - 1;
+		// Insert the read message into the array of linked lists.
+		array_ll_insert(&c_temp, i);
+		printf("Loaded message: %s, room: %s\n", c_temp.text, c_temp.group);
 
-    // Allocate memory for the new node's data.
-    Last_packets[i]->data = (struct chat_packet *) malloc(sizeof(struct chat_packet));
+		// Update the pointer of the most recently written to disk.
+		Last_written[i] = Last_written[i]->next;
+	
+		// If sequence is higher, update our max.
+		if (c_temp.sequence > max) max = c_temp.sequence;
 
-    // memcpy the read data into the newly allocated memory for the next node.
-    memcpy(Last_packets[i]->data, c_temp, sizeof(struct chat_packet));
-    /* If sequence is higher, update our max*/
-    if (c_temp->sequence > max) max = c_temp->sequence;
-    /* In this while loop of reading from file, we only populate the chatroom data structure
-     * if the chat_packet we are reading is a chat message (not a like) -- do likes after*/
-    if (c_temp->type != 1) {
-	    while (rooms->next != NULL)
-	    {
-	       rooms = rooms->next;
-	       if (strncmp(rooms->name, c_temp->group, strlen(c_temp->group)) == 0)
+		if (c_temp.type == 1) {
+			chatroom_process_like(&c_temp);
+		} else {
+			chatroom_insert_msg(&c_temp);
+		}
+
+		/* Update our LTS vector */
+		if (vector[atoi(server)][c_temp.server_id] < c_temp.sequence)
 		{
-		  /*chatroom exists*/
-		  foundroom = 1; printf("Found chatroom %s\n", rooms->name);
-		  break;
+			vector[atoi(server)][Last_packets[i]->data->server_id] = c_temp.sequence;
 		}
-	    }
-	    if (!foundroom) /*room doesn't exist, so create it */
-	    {
-	       rooms->next = malloc(sizeof(struct chatrooms));
-	       rooms = rooms->next;
-	       rooms->head = malloc(sizeof(struct node));
-	       strncpy(rooms->name, c_temp->group, strlen(c_temp->group));
-	       rooms->tail = rooms->head;
-	       printf("Created chatroom %s", rooms->name);
-	    }
-            foundroom = 0; /*Reset found room for next iteration */	
-	    temp = rooms->head; /* Go to first chat in chatroom */
-	   printf("Adding %d to room: %s\n", c_temp->sequence, rooms->name);
-	    while (temp->next != NULL) { /*Search for correct placement of the message.  This provides correct ordering */
-	       if (c_temp->sequence < temp->next->data->sequence) {
-		 temp2 = temp->next;
-		 temp->next = malloc(sizeof(struct node));
-		 temp->next->data = malloc(sizeof(struct chat_packet));
-		 temp->next->likes = malloc(sizeof(struct likes));
-		 temp->next->exists = 1;
-		 memcpy(temp->next->data, c_temp, sizeof(struct chat_packet));
-		 temp->next->next = temp2;
-		 break;
-	       }
-	       temp = temp->next;
-	    }
-	
-	    if (temp->next == NULL) {
-		rooms->tail->next = malloc(sizeof(struct node));
-		rooms->tail = rooms->tail->next;
-		rooms->tail->data = malloc(sizeof(struct chat_packet));
-		rooms->tail->likes = malloc(sizeof(struct likes));
-		rooms->tail->exists = 1;
-		memcpy(rooms->tail->data, c_temp, sizeof(struct chat_packet));
-	    }
-    }
-    /* Update our LTS vector */
-    if (vector[c_temp->server_id][Last_packets[i]->data->server_id] < Last_packets[i]->data->sequence)
-    {
-      vector[c_temp->server_id][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
-	printf("Updated vector %d %d to %d\n", c_temp->server_id, Last_packets[i]->data->server_id, Last_packets[i]->data->sequence);
-    }
-    if (vector[atoi(server)][Last_packets[i]->data->server_id] < Last_packets[i]->data->sequence)
-    {
-      vector[atoi(server)][Last_packets[i]->data->server_id] = Last_packets[i]->data->sequence;
-        printf("Updated vector %d %d to %d\n", c_temp->server_id, Last_packets[i]->data->server_id, Last_packets[i]->data->sequence);
-    }
-
-    // Clear the new node's next pointer for safety.
-    Last_packets[i]->next = NULL;
-
-  }
-  printf("Vector after load:\n");
-  showmatrix((int(*) [6]) vector); 
-  r = chatroomhead;
-  /* Loop for likes. Can make more efficient by doing this in the previous loop */
-  for (i = 0; i < 5; i++) {
-    temp3 = &Server_packets[i];
-    while (temp3->next != NULL) {
-      if (temp3->next->data->type == 1) {
-		// PUT THE LIKE IN THE CHATROOM DATA STRUCTURE
-		c_temp = temp3->next->data;
-	        while (r->next != NULL && (strncmp(r->name, c_temp->group, strlen(c_temp->group)) != 0))
-	        {
-	          r = r->next;
-	        }
-		if (strncmp(r->name, c_temp->group, strlen(c_temp->group)) != 0) /*Chat room doesn't exist*/
-	        {
-	          r->next = malloc(sizeof(struct chatrooms));
-	          r = r->next;
-	          r->head = malloc(sizeof(struct node));
-	          r->tail = r->head;
-	          strncpy(r->name, c_temp->group, strlen(c_temp->group)); /*Copy name to chatroom */
-	        }
-	
-		temp = r->head;
-		while (temp->next != NULL) {
-			if (c_temp->lts == temp->next->data->sequence) {
-				l = temp->next->likes;
-				while (l->next != NULL) {
-				  /* find the user who liked && check if the timestamp is larger */
-				  if (strncmp(l->next->name, c_temp->name, strlen(c_temp->name)) == 0) {
-					if (l->next->like_timestamp > c_temp->sequence) break; // Break if the like_timestamp is larger than the chat_packet's
-					if (c_temp->type == 7) {
-					  l->next->like = 0;
-					} else {
-					  l->next->like = 1;
-					}
-					l->next->like_timestamp = c_temp->sequence;
-					
-					break;
-				  }
-				  l = l->next;
-				}
-	
-				if (l->next == NULL) {
-				  l->next = malloc(sizeof(struct likes));
-				  l = l->next;
-				  if (c_temp->type == 7) {
-				    l->like = 0;
-				  } else {
-				    l->like = 1;
-				  }
-				  l->like_timestamp = c_temp->sequence;
-				  strcpy(l->name, c_temp->name);
-				}
-	
-				break;
-			}
-			else if (c_temp->lts < temp->next->data->sequence) { /*received a like for a nonreceived chat_packet so create a placeholder with node.exists = 0*/
-				temp2 = temp->next;
-				temp->next = malloc(sizeof(struct node));
-				temp->next->data = malloc(sizeof(struct chat_packet));
-				temp->next->data->sequence = c_temp->lts; // This is the LTS of the chat_packet that is supposed to go here
-				temp->next->exists = 0; // This chat_packet has not be received
-				temp->next->next = temp2;
-				temp->next->likes = malloc(sizeof(struct likes)); // First "likes" is an empty head node
-				l = temp->next->likes;
-				l->next = malloc(sizeof(struct likes));
-				l = l->next;
-				if (c_temp->type == 7) {
-				  l->like = 0;
-				} else {
-				  l->like = 1;
-				}
-				l->like_timestamp = c_temp->sequence;
-				strcpy(l->name, c_temp->name);
-				break;
-			}
-			temp = temp->next;
-		}
-
-		if (temp->next == NULL) {
-			temp2 = temp->next;
-			temp->next = malloc(sizeof(struct node));
-			temp->next->data = malloc(sizeof(struct chat_packet));
-			temp->next->data->sequence = c_temp->lts; // This is the LTS of the chat_packet that is supposed to go here
-			temp->next->exists = 0; // This chat_packet has not be received
-			temp->next->next = temp2;
-			temp->next->likes = malloc(sizeof(struct likes)); // First "likes" is an empty head node
-			l = temp->next->likes;
-			l->next = malloc(sizeof(struct likes));
-			l = l->next;
-			if (c_temp->type == 7) {
-			  l->like = 0;
-			} else {
-			  l->like = 1;
-			}
-			l->like_timestamp = c_temp->sequence;
-			strcpy(l->name, c_temp->name);
-		}
-
-      }
-      temp3 = temp3->next;
-    }	
-  }
-
-    /*Update our LTS */
-    lsequence = (max)/10;
-    printf("Setting our LTS sequence to %d\n", lsequence);
-    /*For debugging list chatrooms, and chats  loaded*/
-    printf("Loaded from disk:\n");
-    rooms = chatroomhead->next;
-    while(rooms != NULL)
-    {
-	printf("Room: %s\n", rooms->name);
-	struct node* i;
-	i = rooms->head->next;
-	while (i != NULL)
-	{
-	  printf("|%u|", i->data->sequence);
-	  i = i->next;
 	}
-	printf("\n");
-	rooms = rooms->next;
-	
-    }
-  
+
+	printf("Vector after load:\n");
+	showmatrix((int(*) [6]) vector); 
+
+	/*Update our LTS */
+	lsequence = max / 10;
+	printf("Setting our LTS sequence to %d\n", lsequence);
+
+	/*For debugging list chatrooms, and chats  loaded*/
+	printf("Loaded from disk:\n");
+	rooms = chatroomhead->next;
+
+	while(rooms != NULL) {
+		printf("Room: %s\n", rooms->name);
+		struct node* i;
+		i = rooms->head->next;
+
+		while (i != NULL) {
+			printf("|%u|", i->data->sequence);
+			i = i->next;
+		}
+
+		printf("\n");
+		rooms = rooms->next;
+	}  
 }
 
 void send_liked_msg(struct node *msg, int received) { // The received field says whether the clients already have this chat_packet.
 	struct chat_packet temp;
 	struct likes *l = msg->likes->next;
 	memcpy(&temp, msg->data, sizeof(struct chat_packet));
-        strcat(temp.group, server); /*Append server id for server's group */
+	strcat(temp.group, server); /*Append server id for server's group */
 	/*count likes */
 	while (l != NULL) {
 		if (l->like == 1) temp.num_likes++;
 		l = l->next;
 	}
-        printf("Sending text to group %s, message type: %d\n", temp.group, received);
-	if (received == 1) {
-	        SP_multicast(Mbox, AGREED_MESS, temp.group, 5, sizeof(struct chat_packet), (const char *) (&temp));
-	} else if (received == 3) {
-	        SP_multicast(Mbox, AGREED_MESS, temp.group, 3, sizeof(struct chat_packet), (const char *) (&temp));
+	printf("Sending text to group %s, message type: %d\n", temp.group, received);
+	// Send a like update to the clients.
+	if (received == 0) {
+		SP_multicast(Mbox, AGREED_MESS, temp.group, 0, sizeof(struct chat_packet), (const char *) (&temp));
+	} else if (received == 1) {
+		SP_multicast(Mbox, AGREED_MESS, temp.group, 3, sizeof(struct chat_packet), (const char *) (&temp));
 	} else if (received == 5) {
 		// This happens only for chat_packets that are sent from a membership change. So the client will need to insert these in order of LTS.
-	        SP_multicast(Mbox, AGREED_MESS, temp.group, 13, sizeof(struct chat_packet), (const char *) (&temp));
+		SP_multicast(Mbox, AGREED_MESS, temp.group, 13, sizeof(struct chat_packet), (const char *) (&temp));
 	}
 }
 
 void recv_like(struct chat_packet *c) {
-	struct chatrooms *r;
-	struct node	 *temp;
-	struct likes	 *l;
+	int 		i;
+	struct node	*temp;
+
+	i = c->server_id - 1;
 	lsequence++;
-	c->sequence = lsequence*10 + atoi(server); // give the like package a sequence.
-        Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
-        Last_packets[atoi(server) - 1]->next->data = malloc(sizeof(struct chat_packet));
-        memcpy(Last_packets[atoi(server) - 1]->next->data, c, sizeof(struct chat_packet));
+	c->sequence = lsequence * 10 + atoi(server); // give the like package a sequence.
 
-        r = chatroomhead;
-	// Find the correct group.
-        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
-        {
-          r = r->next;
-        }
-	if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
-        {
-          r->next = malloc(sizeof(struct chatrooms));
-          r = r->next;
-          r->head = malloc(sizeof(struct node));
-          r->tail = r->head;
-          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
-        }
+	array_ll_insert(c, i);
 
-	temp = r->head->next;
-	while (temp != NULL) {
-		if (c->lts == temp->data->sequence) {
-			l = temp->likes; // Head like is empty
-			while (l->next != NULL) {
-			  if (strncmp(l->next->name, c->name, strlen(c->name)) == 0) {
-				if (c->type == 7) {
-				  l->next->like = 0;
-				} else {
-				  l->next->like = 1;
-				}
-				l->next->like_timestamp = c->sequence;
-				
-				break;
-			  }
-			  l = l->next;
-			}
+	write_data();
 
-			if (l->next == NULL) {
-			  l->next = malloc(sizeof(struct likes));
-			  l = l->next;
-			  if (c->type == 7) {
-			    l->like = 0;
-			  } else {
-			    l->like = 1;
-			  }
-			  l->like_timestamp = c->sequence;
-			  strcpy(l->name, c->name);
-			}
+	temp = chatroom_process_like(c);
 
-			break;
-		}
-		temp = temp->next;
-	}
+	/* Send the message to the group with the modified likes to the group*/
+	send_liked_msg(temp, 0);
 
         write_data();
         Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
         /* Send the message to the group with the modified likes to the group*/
 	send_liked_msg(temp, 1);
 	/* Send message to servers */
-	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
+	SP_multicast(Mbox, AGREED_MESS, "Servers", 0, sizeof(struct chat_packet), (const char *) c);
+
 	/*Update vector */
 	vector[atoi(server)][c->server_id] = c->sequence;
 }
  
 void recv_text(struct chat_packet *c) {
-/*Received text message*/
-        struct chatrooms *r;
-        printf("Received text: %s\n", c->text);
-        lsequence++;
-        c->sequence = lsequence*10 + atoi(server); /*Lamport timestamp */
-	c->num_likes = 0;
+	int 		i;
+	struct node	*temp;
 
-	/* Insert into the array-linkedlist data structure */
-        Last_packets[atoi(server) - 1]->next = malloc(sizeof(struct node));
-        Last_packets[atoi(server) - 1]->next->data = malloc(sizeof(struct chat_packet));
-        memcpy(Last_packets[atoi(server) - 1]->next->data, c, sizeof(struct chat_packet));
+	i = c->server_id - 1;
+	lsequence++;
+	c->sequence = lsequence * 10 + atoi(server); // give the like package a sequence.
 
-	/* Insert into the chatrooms data structure */
-        r = chatroomhead;
-        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
-        {
-          r = r->next;
-        }
-	r->tail->next = malloc(sizeof(struct node));
-	r->tail->next->data = malloc(sizeof(struct chat_packet));
-	r->tail->next->likes = malloc(sizeof(struct likes));
-	r->tail->next->exists = 1;
-	memcpy(r->tail->next->data, c, sizeof(struct chat_packet));
-	r->tail = r->tail->next;
+	array_ll_insert(c, i);
 
-        write_data();
-        Last_packets[atoi(server) - 1] = Last_packets[atoi(server) - 1]->next; /* Move pointer */
-        strcat(c->group, server); /*Append server id for server's group */
-        printf("Sending text to group %s\n", c->group);
-        /* Send the message to the group */
-        SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) c);
+	write_data();
+
+	temp = chatroom_insert_msg(c);
+
 	/* Send message to servers */
-	c->group[strlen(c->group) - 1] = '\0'; /*Remove the trailing server id*/
-	SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
+	SP_multicast(Mbox, AGREED_MESS, "Servers", 0, sizeof(struct chat_packet), (const char *) c);
 
+	/* Send the message to the group with the modified likes to the group*/
+	send_liked_msg(temp, 0);
 }
 
 void recv_server_like(struct chat_packet *c, int16 mess_type) {
@@ -553,7 +348,7 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
 		if (temp->next->exists == 1) {
 		        /* Send the message to the group with the modified likes to the group*/
-			send_liked_msg(temp->next, 1);
+			send_liked_msg(temp->next, 0);
 		}
 	}
 	else
@@ -657,7 +452,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 	        write_data();
 	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
 	        /* Send the message to the group */
-		if (mess_type == 3) {
+		if (mess_type == 0) {
 		        send_liked_msg(temp->next, 3);
 		} else if (mess_type == 5) {
 			send_liked_msg(temp->next, 5);
@@ -690,6 +485,7 @@ void recv_join_msg(struct chat_packet *c) {
 	struct likes *l;
 	struct names *n;
         r = chatroomhead;
+	char namelist[80];
         while (r->next != NULL && (strncmp(r->name, groupname, strlen(c->group)) != 0))
         {
           r = r->next;
@@ -1181,3 +977,175 @@ for (i=1; i<7; i++)
 
 }
 
+/* Create a chatroom at the end of the linked list of chatrooms */
+struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
+	if (rooms_tail == NULL || rooms_tail->next != NULL) {
+		printf("An error occurred with creating a new room, %s\n", room_name);
+
+		return NULL;
+	}
+
+	rooms_tail->next = malloc(sizeof(struct chatrooms));
+	rooms_tail = rooms_tail->next;
+	rooms_tail->head = rooms_tail->tail = malloc(sizeof(struct node));
+	rooms_tail->names = malloc(sizeof(struct names));
+	strncpy(rooms_tail->name, room_name, strlen(room_name) + 1);
+
+	return rooms_tail;
+}
+
+/* 
+ *  Finds a chatroom based on the name of the room.
+ *  If not found, creates a new one by calling creat_room().
+ */
+struct chatrooms * find_room(char *room_name) {
+	struct chatrooms *temp = chatroomhead;
+
+	while (temp->next != NULL) {
+		if (strcmp(temp->next->name, room_name) == 0) {
+			return temp->next;
+		}
+		temp = temp->next;
+	}
+
+	return create_room(room_name, temp);
+}
+
+/* 
+ * Finds the spot where the message should be inserted to maintain order based on
+ * lamport timestamp.
+ */
+struct node * find_insert_slot(int target_stamp, struct chatrooms *room) {
+	struct node *temp = room->head;
+
+	while (temp->next != NULL) {
+		if (target_stamp <= temp->next->data->sequence) {
+			return temp;
+		}
+	}
+	return temp;
+}
+
+/* Creates an empty node used for chatrooms. */
+struct node * empty_chatroom_node() {
+	struct node *temp = malloc(sizeof(struct node));
+
+	temp->data = malloc(sizeof(struct chat_packet));
+	temp->likes = malloc(sizeof(struct likes));
+	temp->exists = 0;
+
+	return temp;
+}
+
+/* Chatroom insert for a chat_packet. If the chat already exists, do nothing. */
+struct node * chatroom_insert_msg(struct chat_packet *msg) {
+	struct chatrooms	*room;
+	struct node			*slot, *temp;
+
+	if (strlen(msg->group) == 0) {
+		printf("An error occurred due to a nonspecified room name");
+
+		return NULL;
+	}
+
+	room = find_room(msg->group);
+	if (room == NULL) {
+		return NULL;
+	}
+
+	// Insert the new message
+	slot = find_insert_slot(msg->sequence, room);
+	if (slot->next != NULL && slot->next->sequence == msg->sequence) {
+		printf("An error occured inserting a message into the chatroom data structure\n");
+
+		return NULL;
+	}
+
+	if (slot->next == NULL || msg->sequence < slot->next->sequence) {
+		temp = slot->next;
+		slot->next = empty_chatroom_node();
+		slot->next->next = temp;
+	}
+
+	slot->next->exists = 1;
+	memcpy(slot->next->data, msg, sizeof(struct chat_packet));
+	return slot->next;
+}
+
+/* Array linked list insert for a chat_packet */
+void array_ll_insert(struct chat_packet *msg, int server) {
+	// Set up the new node.
+	Last_packets[server]->next = malloc(sizeof(struct node));
+	Last_packets[server] = Last_packets[server]->next;
+	Last_packets[server]->data = malloc(sizeof(struct chat_packet));
+	Last_packets[server]->likes = malloc(sizeof(struct likes));
+
+	// Copy chat_packet into the new node.
+	memcpy(Last_packets[server]->data, msg, sizeof(struct chat_packet));
+}
+
+/* Finds the message which is to be liked and returns the head of the likes */
+struct node * find_desired_msg(int target_stamp, struct chatrooms *room) {
+	struct node *temp, *temp2;
+
+	temp = room->head;
+	while (temp->next != NULL) {
+		if (target_stamp == temp->next->data->sequence) {
+			return temp->next;
+		}
+		if (target_stamp < temp->next->data->sequence) {
+			break;
+		}
+	}
+
+	temp2 = temp->next;
+	temp->next = empty_chatroom_node();
+	temp->next->data->sequence = target_stamp;
+	return temp->next;
+}
+
+struct likes * find_user_like(char *username, struct likes *head) {
+	struct likes *temp;
+
+	temp = head;
+	while (temp->next != NULL) {
+		if (strcmp(username, temp->next->name) == 0) {
+			return temp->next;
+		}
+	}
+
+	temp->next = malloc(sizeof(struct likes));
+	strncpy(temp->next->name, username, strlen(username) + 1);
+	return temp->next;
+}
+
+struct node * chatroom_process_like(struct chat_packet *msg) {
+	struct chatrooms	*room;
+	struct node			*target_msg;
+	struct likes		*target_like;
+
+	room = find_room(msg->group);
+	if (room == NULL) {
+		return;	
+	}
+
+	target_msg = find_desired_msg(msg->lts, room);
+	if (target_msg == NULL) {
+		return;
+	}
+
+	target_like = find_user_like(msg->name, target_msg->likes);
+
+	if (msg->sequence > target_like->like_timestamp) {
+		if (msg->type == 1) {
+			target_like->like = 1;
+		} else if (msg->type == 7) {
+			target_like->like = 0;
+		}
+		target_like->like_timestamp = msg->sequence;
+	}
+
+	return target_msg;
+}
+
+// vim: set tabstop=4

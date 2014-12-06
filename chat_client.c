@@ -344,7 +344,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    int ret;
    struct node *temp, *temp2;
    printf("Got packet type %d\n", c->type);
-   if (mess_type == 5) { // If the mess_type is 5, that means we already have the chat_packet, we just want to update the likes.
+   if (mess_type == 0) { // If the mess_type is 0, that means we already have the chat_packet, we just want to update the likes.
 	temp = chatroom_start->next;
 	while (temp != NULL) {
 		if (temp->data->sequence == c->sequence) {
