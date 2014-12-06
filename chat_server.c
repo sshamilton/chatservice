@@ -179,10 +179,14 @@ void send_liked_msg(struct node *msg, int received) { // The received field says
 	if (received == 0) {
 		SP_multicast(Mbox, AGREED_MESS, temp.group, 0, sizeof(struct chat_packet), (const char *) (&temp));
 	} else if (received == 1) {
-		SP_multicast(Mbox, AGREED_MESS, temp.group, 3, sizeof(struct chat_packet), (const char *) (&temp));
+		SP_multicast(Mbox, AGREED_MESS, temp.group, 1, sizeof(struct chat_packet), (const char *) (&temp));
 	} else if (received == 5) {
 		// This happens only for chat_packets that are sent from a membership change. So the client will need to insert these in order of LTS.
 		SP_multicast(Mbox, AGREED_MESS, temp.group, 13, sizeof(struct chat_packet), (const char *) (&temp));
+	}
+       else
+	{
+		printf("Uh oh, type is %d\n", received);
 	}
 }
 
@@ -203,10 +207,6 @@ void recv_like(struct chat_packet *c) {
 	/* Send the message to the group with the modified likes to the group*/
 	send_liked_msg(temp, 0);
 
-        write_data();
-        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
-        /* Send the message to the group with the modified likes to the group*/
-	send_liked_msg(temp, 1);
 	/* Send message to servers */
 	SP_multicast(Mbox, AGREED_MESS, "Servers", 0, sizeof(struct chat_packet), (const char *) c);
 
@@ -232,7 +232,7 @@ void recv_text(struct chat_packet *c) {
 	SP_multicast(Mbox, AGREED_MESS, "Servers", 0, sizeof(struct chat_packet), (const char *) c);
 
 	/* Send the message to the group with the modified likes to the group*/
-	send_liked_msg(temp, 0);
+	send_liked_msg(temp, 1);
 }
 
 void recv_server_like(struct chat_packet *c, int16 mess_type) {
@@ -384,7 +384,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 		return;
 	}
 	/* If like message, process it as a like */
-	if (c->type == 1) {
+	if (c->type == 1 || c->type == 7) {
 		printf("Received like for message: %d\n", c->lts);
 		recv_server_like(c, mess_type);
 		return;
@@ -438,22 +438,20 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 		}
 	
 		if (temp->next == NULL) { /*Latest in sequence, put at end of list */
-			r->tail->next = malloc(sizeof(struct node));
-			r->tail = r->tail->next;
-			r->tail->data = malloc(sizeof(struct chat_packet));
-			r->tail->likes = malloc(sizeof(struct likes));
-			r->tail->exists = 1;
-			memcpy(r->tail->data, c, sizeof(struct chat_packet));
+			temp->next = malloc(sizeof(struct node));
+			temp->next->data = malloc(sizeof(struct chat_packet));
+			temp->next->likes = malloc(sizeof(struct likes));
+			temp->next->exists = 1;
+			memcpy(temp->next->data, c, sizeof(struct chat_packet));
 			/* For sending below, set temp->next, since it is null */
-			printf("Setting temp next\n");
-			temp->next = r->tail;
+			printf("Setting temp next\n");			
 		}
 	
 	        write_data();
 	        Last_packets[c->server_id - 1] = Last_packets[c->server_id - 1]->next; /* Move pointer */
 	        /* Send the message to the group */
 		if (mess_type == 0) {
-		        send_liked_msg(temp->next, 3);
+		        send_liked_msg(temp->next, 1);
 		} else if (mess_type == 5) {
 			send_liked_msg(temp->next, 5);
 		}
@@ -1022,6 +1020,7 @@ struct node * find_insert_slot(int target_stamp, struct chatrooms *room) {
 		if (target_stamp <= temp->next->data->sequence) {
 			return temp;
 		}
+		temp = temp->next;
 	}
 	return temp;
 }
@@ -1096,6 +1095,7 @@ struct node * find_desired_msg(int target_stamp, struct chatrooms *room) {
 		if (target_stamp < temp->next->data->sequence) {
 			break;
 		}
+		temp = temp->next;
 	}
 
 	temp2 = temp->next;
@@ -1112,6 +1112,7 @@ struct likes * find_user_like(char *username, struct likes *head) {
 		if (strcmp(username, temp->next->name) == 0) {
 			return temp->next;
 		}
+		temp = temp->next;
 	}
 
 	temp->next = malloc(sizeof(struct likes));
