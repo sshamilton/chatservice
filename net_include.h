@@ -25,6 +25,7 @@ struct likes {
 
 struct names {
   char name[25];
+  char pname[25];
   struct names *next;
 };
 

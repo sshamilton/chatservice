@@ -19,6 +19,7 @@ static struct chatrooms* chatroomhead;
 static  int    servers_available = 0;
 static  int	vectors_received = 0;
 static  int servers_online[6];
+
 void read_disk();
 void send_vector();
 void recv_client_msg();
@@ -35,6 +36,9 @@ void showmatrix(int rvector[][6]);
 /* 6 - Refresh client screen */
 /* 7 - Unlike message */
 /* 8 - Display servers online */
+/* 9 - Send client user list */
+/* 10 - Send username/private name combo from server to server */
+/* 11 - Remove username/private name combo from group server to server */
 
 /*
  * Read disk is used for recovering from crashes. Things to do:
@@ -42,6 +46,54 @@ void showmatrix(int rvector[][6]);
  * server.
  * 2. Restore the vector.
  */
+
+void add_user(char *name, char *pname, struct names *names)
+{
+  struct  names *i;
+  int founduser = 0;
+  i = names;
+  
+  while (i != NULL)
+  {
+     if (strncmp(i->name, name, strlen(name)))
+     {
+       printf("User exists\n");
+       founduser = 1;
+       break;
+     }
+  }
+  if (!founduser)
+  {
+     printf("Adding user to array\n");
+     i = malloc(sizeof(struct names));
+     strncpy(i->name, name, strlen(name));
+     strncpy(i->pname, pname, strlen(pname));
+  }
+}
+
+void rm_user(char *pname, struct names *names)
+{
+  struct names *i, *t;
+  i = names;
+  /*See if the name is the first in the list */
+  if (i != NULL && strncmp(i->pname, pname, strlen(pname)))
+  {
+     names = names->next; /*Remove the head of the list */
+  }
+  else if (i != NULL)
+  {
+    while (i->next != NULL)
+    {
+       if (strncmp(i->next->pname, pname, strlen(pname)))
+       {
+         printf("Found user %s, removing\n", pname);
+         i->next = i->next->next; /*advance pointer to next to drop out the user */
+         break;
+       }
+    }
+  }
+}
+
 void read_disk() {
   int i, foundroom =0, max =0;
   struct chat_packet *c_temp;
@@ -509,6 +561,24 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 		printf("Packet received already.\n");
 	}
 }
+struct chatrooms *find_chatroom(char *group)
+{
+  struct chatrooms *r;
+  r = chatroomhead;
+	while (r->next != NULL && (strncmp(r->name, group, strlen(group)) != 0))
+         {
+             r = r->next;
+         }
+        if (strncmp(r->name, group, strlen(group)) != 0) /*Chat room doesn't exist*/
+        {
+             r->next = malloc(sizeof(struct chatrooms));
+             r = r->next;
+             r->head = malloc(sizeof(struct node));
+             r->tail = r->head;
+             strncpy(r->name, group, strlen(group)); /*Copy name to chatroom */
+         }
+        return r;
+}
 
 void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEMENT FILLING IN A MISSING CHAT_PACKET WHEN EXISTS == 0
 	struct chatrooms *r;
@@ -524,6 +594,17 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 		recv_server_like(c, mess_type);
 		return;
 	}
+	/* Received username from server */
+        else if (c->type == 10) {
+	   /* Find room */
+	   r = find_chatroom(c->group);
+           add_user(c->name, c->client_group, r->names);
+        }
+        /* Recieved user leave from other server */
+        else if (c->type == 11) {
+	   r = find_chatroom(c->group);
+           rm_user(c->client_group, r->names);
+        }
         printf("Received text: %s\n", c->text);
    	/* Check to make sure we don't already have it */
 	if (c->sequence > vector[atoi(server)][c->server_id] || mess_type == 5) {
@@ -539,19 +620,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){ // NEED TO IMPLEME
 	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
 	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
 		// find the correct group (chatroom)
-	        r = chatroomhead;
-	        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
-	        {
-	          r = r->next;
-	        }
-		if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
-	        {
-	          r->next = malloc(sizeof(struct chatrooms));
-	          r = r->next;
-	          r->head = malloc(sizeof(struct node));
-	          r->tail = r->head;
-	          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
-	        }
+	        r = find_chatroom(c->group);
 		// find the correct spot to place the new message in the linked list. If a placeholder for the message is found then put it in there.
 		temp = r->head;
 		while (temp->next != NULL) {
@@ -621,7 +690,6 @@ void recv_join_msg(struct chat_packet *c) {
 	struct likes *l;
 	struct names *n;
         r = chatroomhead;
-	char namelist[80];
         while (r->next != NULL && (strncmp(r->name, groupname, strlen(c->group)) != 0))
         {
           r = r->next;
@@ -638,17 +706,12 @@ void recv_join_msg(struct chat_packet *c) {
 	  strncpy(r->names->name, c->name, strlen(c->name)); /*Copy username to chatroom membership */
           printf("added name: %s\n", r->names->name);
 	}
-	else 
+	else /* Room exists, add user to room */
 	{
-	  n = r->names;
-	  /*Tack on username*/
-	  while (n->next != NULL)
-          {
-		n=n->next;
-	  }
-	  n->next = malloc(sizeof(struct names));
-	  n=n->next;
-	  strncpy(n->name, c->name, strlen(c->name)); printf("Tacked on %s\n", c->name);
+          add_user(c->name, c->client_group, r->names);
+ 	  /*Let other servers know the username was added */
+          c->type = 10;
+          ret = SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
 	}
         i = r->head->next;
 	n = r->names;
@@ -668,21 +731,32 @@ void recv_join_msg(struct chat_packet *c) {
           i = i->next;
           
         }
-	/*Move the following to its own function, then call it on membership join, or update from other server */
-	bzero(namelist, strlen(namelist));
-	while (n != NULL) /*Build membership group name list */ 
-	{
-	  strcat(namelist, n->name);
-	  strcat(namelist, " ");
-	  n = n->next;
-	}
-	/*Send namelist to everyone in chatroom*/
-	strncpy(c->text, namelist, strlen(namelist));
-	c->type = 9;
-	
-        ret = SP_multicast(Mbox, AGREED_MESS, c->group, 3, sizeof(struct chat_packet), (const char *) (c));
-        
-	printf("Sent names in chatroom: %s to group %s with return %d\n", c->text, c->group, ret);
+}
+
+void send_namelist(char *group, struct names *names)
+{
+  char namelist[80];
+  struct chat_packet *c;
+  struct names *n;
+  n=names;
+  int ret;
+  c = malloc(sizeof(struct chat_packet));
+  
+        bzero(namelist, strlen(namelist));
+        while (n != NULL) /*Build membership group name list */
+        {
+          strcat(namelist, n->name);
+          strcat(namelist, " ");
+          n = n->next;
+        }
+        /*Send namelist to everyone in chatroom*/
+        strncpy(c->text, namelist, strlen(namelist));
+        c->type = 9;
+
+        ret = SP_multicast(Mbox, AGREED_MESS, group, 3, sizeof(struct chat_packet), (const char *) (c));
+
+        printf("Sent names in chatroom: %s to group %s with return %d\n", c->text, c->group, ret);
+
 }
 
 void recv_client_msg(struct chat_packet *c) {
@@ -864,7 +938,11 @@ static  char             mess[MAX_MESSLEN];
         int              endian_mismatch;
         int              i,j;
         int              ret;
+        char             connect_group[2];
+	char		roomname[25];
+	struct 	chatrooms *r;
         service_type = 0;
+        sprintf(connect_group, "c%s", server);
 
         ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups, 
                 &mess_type, &endian_mismatch, sizeof(mess), mess );
@@ -951,7 +1029,27 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 }
                                 memb_change();
                             }
-
+			else if (strncmp(sender, connect_group, 2) == 0)
+			{
+				printf("client connect/disconnect\n");
+			}
+			else
+			{
+		          if( Is_caused_join_mess( service_type) )
+			  {
+			    /*User joined a group, user should be added already, send user update to group*/
+			    strncpy(roomname, sender, strlen(sender)-1); /*remove tacked on server id*/
+			    r = find_chatroom(roomname);
+			    send_namelist(sender, r->names);
+			  }
+			  else if (Is_caused_leave_mess( service_type ))
+			 {
+			    strncpy(roomname, sender, strlen(sender)-1);
+			     r = find_chatroom(roomname);
+			    rm_user(memb_info.changed_member, r->names);
+			 }
+			
+			}
                         if( Is_caused_join_mess( service_type ) )
                         {
                                 printf("Due to the JOIN of %s\n", memb_info.changed_member );
