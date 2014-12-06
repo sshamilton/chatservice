@@ -27,15 +27,17 @@ void memb_change();
 void showmatrix(int rvector[][6]);
 
 struct node * empty_chatroom_node();
+// Insert into the array of linked lists.
 void array_ll_insert(struct chat_packet *, int);
+// Insert a text message into the chatroom data structure.
 struct node * chatroom_insert_msg(struct chat_packet *);
 struct node * find_desired_msg(int, struct chatrooms *);
 struct likes * find_user_like(char *, struct likes *);
+// Insert a like message into the chatroom data structure.
 struct node * chatroom_process_like(struct chat_packet *);
 struct chatrooms * create_room(char *, struct chatrooms *);
 struct chatrooms * find_room(char *);
 struct node * find_insert_slot(int, struct chatrooms *);
-void append_username(char *);
 /* Message Types */
 /* 0 - Display chat text */
 /* 1 - Like message */
@@ -395,7 +397,7 @@ void recv_join_msg(struct chat_packet *c) {
   int ret;
   char groupname[MAX_GROUP_NAME];
 	/* Add server index to groupname */
-	strnapy(groupname, c->group, strlen(c->group));
+	strncpy(groupname, c->group, strlen(c->group));
         strcat(c->group, server);
 	printf("Sending to client group %s\n", c->client_group);
         ret = SP_multicast(Mbox, AGREED_MESS, c->client_group, 3, sizeof(struct chat_packet), (const char *) c);
@@ -413,29 +415,25 @@ void recv_join_msg(struct chat_packet *c) {
         r = chatroomhead;
 	char namelist[80];
 
-	// Replacement code: replaces what is commented out.
-	append_username(c->name);
-/*
         while (r->next != NULL && (strncmp(r->name, groupname, strlen(c->group)) != 0))
         {
           r = r->next;
         }
 	
-        if (strncmp(r->name, groupname, strlen(groupname)) != 0) Chat room doesn't exist
+        if (strncmp(r->name, groupname, strlen(groupname)) != 0)
         {
           r->next = malloc(sizeof(struct chatrooms));
           r = r->next;
 	  r->names = malloc(sizeof(struct names));
           r->head = malloc(sizeof(struct node));
           r->tail = r->head;
-          strncpy(r->name, groupname, strlen(groupname)); Copy name to chatroom */
-	  strncpy(r->names->name, c->name, strlen(c->name)); /*Copy username to chatroom membership */
-/*          printf("added name: %s\n", r->names->name);
+          strncpy(r->name, groupname, strlen(groupname));
+	  strncpy(r->names->name, c->name, strlen(c->name)); 
+          printf("added name: %s\n", r->names->name);
 	}
 	else 
 	{
 	  n = r->names;
-	  Tack on username
 	  while (n->next != NULL)
           {
 		n=n->next;
@@ -443,7 +441,7 @@ void recv_join_msg(struct chat_packet *c) {
 	  n->next = malloc(sizeof(struct names));
 	  n=n->next;
 	  strncpy(n->name, c->name, strlen(c->name)); printf("Tacked on %s\n", c->name);
-	}*/
+	}
         i = r->head->next;
 	n = r->names;
         while (i != NULL)
@@ -888,7 +886,7 @@ struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
 	rooms_tail->next = malloc(sizeof(struct chatrooms));
 	rooms_tail = rooms_tail->next;
 	rooms_tail->head = rooms_tail->tail = malloc(sizeof(struct node));
-	rooms_tail->names = malloc(sizeof(struct name));
+	rooms_tail->names = malloc(sizeof(struct names));
 	strncpy(rooms_tail->name, room_name, strlen(room_name) + 1);
 
 	return rooms_tail;
@@ -1046,24 +1044,6 @@ struct node * chatroom_process_like(struct chat_packet *msg) {
 	}
 
 	return target_msg;
-}
-
-void append_username(struct chat_packet *msg) {
-	struct chatrooms	*room;
-	struct names		*names;
-
-	room = find_room(msg->group);
-
-	names = room->names;
-
-	while (names->next != NULL) {
-		if (strcmp(names->next->name, msg->name) == 0){
-			return;
-		}
-	}
-
-	names->next = malloc(sizeof(names));
-	strncpy(names->next->name, msg->name, strlen(msg->name) + 1);
 }
 
 // vim: set tabstop=4
