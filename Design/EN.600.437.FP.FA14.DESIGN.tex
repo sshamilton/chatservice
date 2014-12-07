@@ -75,7 +75,7 @@ The five groups per existing chat room, one per each server, represents the memb
 We only have one type of packet we send called a chat\_packet. There is a field, "type",on the packet that helps distinguish the role which a given chat\_packet fufills. The different types of packets are as follows:
 
 \begin{enumerate}
-\setcounter{enumi}{0}
+\setcounter{enumi}{-1}
 \item Text chat.
 \item Like message.
 \item Connection to a server.
@@ -152,7 +152,7 @@ These are specifically for maintaining a consistent view of chat room membership
 \end{center}
 
 \subsection{Server Data Structures}
-The server has two primary data structures. An array of linked lists for all user updates and a linked list of all chat rooms.
+The server has two primary data structures. An array of linked lists for all user updates and a linked list of all chat rooms each with a linked list of the messages from that chat room in lamport timestamp order.
 
 \subsubsection{Array of Linked List}
 This is an array of length 5, each cell corresponding to a linked list of one server's updates. The updates received from a given server are linked together in no particular order along the designated cell of the array. This data structure is used alongside a matrix which carries the highest lamport timestamp received by each server for each server. This makes it so that when there is a merge or partition, the servers know what updates other servers do not have but need.
@@ -165,7 +165,7 @@ A second data structure is used in order to keep track of messages (in order) in
 
 There are two linked lists which have different purposes. First, there is a linked list of names used to keep track of the clients (and their usernames) who are a part of that chat room. Each of these names has a name string, a pointer to the next name, and a pointer to a linked list of private names which are unique to each client process. This linked list of private names is used to keep track of the client processes that share the same username (this goes along with the assumption that usernames are unique). This way, when there are no private usernames left in the list, then it is definite that there are no users in that chat room with the associated username.
 
-The other linked list at the second level is the actual messages sent on that chat room. This linked list is sorted by increasing order based on lamport timestamp. These message nodes therefore have a chat\_packet, a pointer to the next message, and a pointer to a list of likes. The mentioned linked lists from each message contain the name of a user who has liked (or then subsequently unliked) the message, a "like" field which determines whether or not that given user is still liking the message, and a field for the lamport timestamp of the highest like/unlike message from the given user.
+The other linked list at the second level is the actual messages sent on that chat room. This linked list is sorted by increasing order based on lamport timestamp. These message nodes therefore have a chat\_packet, a pointer to the next message, and a pointer to a list of likes. The mentioned linked lists of likes from each message contain the name of a user who has liked (or then subsequently unliked) the message, a "like" field which determines whether or not that given user is still liking the message, and a field for the lamport timestamp of the highest like/unlike message from the given user.
 
 The incentive behind having this data structure is that a client process will only ever be in one chat room at a time, therefore it will only want updates that pertain to that chat room. With this three tiered linked list, a server can send a client process the updates for a chat room for a single room without difficulty by iterating through the correct chat room's linked list of messages. And then when sending updated messages to the clients, the server can count the number of actual likes by traversing a given message's linked list of likes and send that as part of the message. Therefore the client does no computational work, it simply figures out where the received packet goes in its data structure which is discussed later.
 
@@ -175,14 +175,17 @@ The incentive behind having this data structure is that a client process will on
 \subsection{Client State Machine}
 
 \subsection{Client Data Structures}
-The client only has one data structure. A linked list of the messages that have occured in the chat room to which a client is a member. This makes it very easy for the client process to output the contents of its chat room. Simply iterate through the linked list to print out the messages.
-
+The client only has one data structure. A linked list of the messages that have occured in the chat room to which a client is a member. These messages are sorted in lamport timestamp order. Each of the nodes has the number of likes associated with that message as a part of the message data. This makes it very easy for the client process to output the contents of its chat room. One simply iterates through the nodes and prints out the username of the message's author, the text, and the number of likes.
 
 \subsection{Algorithm}
 
 \subsubsection{Regular Case}
 
-The client sends all of its actions through the server in order to communicate with the members in a chat room. The server then communicates these actions to the other servers with which it has contact. Lastly, the server 
+The algorithm in the regular case:
+\begin{itemize}
+\item 
+\end{itemize}
+
 \subsubsection{Reconciliation Case}
 
 \end{document}
