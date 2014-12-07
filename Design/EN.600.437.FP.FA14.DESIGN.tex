@@ -87,24 +87,30 @@ We only have one type of packet we send called a chat\_packet. There is a field,
 \item Display servers online.
 \item Send client user list.
 \item Send username/private name combination from server to server.
-\item Reove username/private name combination from server to server.
+\item Remove username/private name combination from server to server.
 \end{enumerate}
 
 Types 0, 1, and 7 are used both for communcation from server to server and between client and server.
 
-These constitute the main actions that a client can perform in a chat room. A client can say something in a chat room and a client can like/unlike a message in a chat room.
+These constitute the main actions that a client can perform in a chat room. A client can say something in a chat room or a client can like/unlike a message in a chat room. These different types help the client and server processes distinguish which one of these types of actions a given chat\_packet is so that they can treat them accordingly. Specifically, when a server receives any of these packets, it will insert them into the data structures (which are discussed in Section 4). If it comes directly from a client, then the server will insert them directly but if it comes from a different server, then the server must check the lamport timestamp and compare it to the value for the sending server in its own vector which will determine whether or not the message has already been received. When a client receives a message, it responds based on these types in conjunction with the mess\_type that accompanies messages from Spread (determined by the server). These responses may occur in two ways, the client process may immediately update the screen with a new message or a set of new messages, or the client process may not display any changes and simply update the data structure. The immediate update of the screen when there are new messages to display.
 
-Types 2 and 5 are used for communcation between client and server.
+Types 2, 5, and 8 are used for communcation between client and server.
 
-These constitute the packets necessary for setting up a client on a server/chat room. A client thus has a way to tell a server that it wants to connect or that it wants to join a chat room on that server.
+These constitute the packets necessary for setting up a client on a server/chat room. A client thus has a way to tell a server that it wants to connect or that it wants to join a chat room on that server. The client will send these types of packets to the server it wants to join after checking if the server is up (by using membership groups as discussed). Then the server will respond with the same types of messages to confirm the membership requests so that the client can begin to initiate chat room actions. Type 8 messages are also related in that they have the specific role for requesting/receiving information on the available servers. A client may ask for the current availability of servers in relation to the one it is connected to by asking that server. The server responds with a type 8 message with the available servers as a string.
 
-Types 4, 6, 8, 9 are used for communcation from server to client.
+Types 6, 8, 9 are used for communcation from server to client.
 
-These constitute the updates that a server must provide a client in order to provide a consistent chat room experience. The server can send updates to the client process that do various things, but in general just keep the client updated on specifically messages and likes from other clients and user changes in a group.
+These constitute the updates that a server must provide a client in order to provide a consistent chat room experience. The server can send updates to the client process that do various things, but in general just keep the client updated on specifically messages and likes from other clients and user changes in a group. Specifically, type 6 messages accompany like updates and new messages that have been inserted in between current messages on the client due to a merge.
 
 Types 10 and 11 are used for communcation from server to server.
 
-These are specifically for maintaining a consistent view of chat room membership across servers. The servers have types used specifically for communicating changes in users in all of the chat rooms.
+These are specifically for maintaining a consistent view of chat room membership across servers. The servers have these types used specifically for communicating changes in users in all of the chat rooms. Specifically, these packets are used after a membership change amongst the servers. When a membership change occurs, the members in a chat room which any given process can communcicate with changes because they are from that point able/unable to talk with them anymore. Type 10 is used to tell connected servers to add some user to the data structure (more on this discussed later). Similarly, type 11 is used to tell them to remove some user.
+
+\subsection{Matrix of Received Updates}
+
+In order to make the lamport timestamp method, each server process maintains a matrix where each of the columns, $i$, are the latest received "vector" from the corresponding server $i$. These are communicated between servers after a membership change amongst the servers. That way all of the servers in some partition will share the most possibly up-to-date information all servers in the chat service. Each component, $j$, in a vector $i$ is a lamport timestamp value for the highest lamport timestamp received from the server $j$. Therefore, if the 2nd column (the second server's vector), has 84 in the 4th component, that means that, amongst all of the processes in the given partition, the servers know for certain that server 2 has messages from server 4 at least up to a lamport timestamp value of 84.
+
+The point of this is so that after a partition and merge, servers know what information they must share with each other in order to reach a matching state within the partition. Put simply, the servers in a merge check to see what the lowest lamport timestamp in each row is and then the server with, first, the highest lamport timestamp for that row, and second, the lowest server ID, will send all the messages it has from that lowest value to the highest it has to the server group it is in. More on this is discussed in the discussion of the algorithm later on.
 
 %\begin{lstlisting}
 %// Structure of chat packet.
