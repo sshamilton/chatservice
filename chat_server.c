@@ -947,10 +947,14 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 servers_available = num_groups;  /*To determine how many servers to update */
                                 printf("Running membership change\n");
                                 /*Update servers online*/
-                                /*Clear out array */
+                                /*Clear out array and other vectors */
                                 for (i=0; i< 7; i++)
                                 {
                                     servers_online[i] = 0;
+				    if (i != atoi(server)) /*Clear out other vectors except ours */
+				    {
+					vector[i][1] = 0; vector[i][2] =0; vector[i][3] = 0; vector[i][4]=0; vector[i][5] =0;
+				    }
                                 }
                                 printf("Serv online...numgrp=%d\n", num_groups);
                                 for (i=0; i < num_groups; i++)
