@@ -107,7 +107,7 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
      }
      p->next = malloc(sizeof(struct pnames));
      strncpy(p->next->pname, pname, strlen(pname));
-     i->next->pnames->next->server_id = server_id;
+	 p->next->server_id = server_id;
   }
   else
   {
@@ -588,7 +588,62 @@ void recv_join_msg(struct chat_packet *c) {
 
 void update_userlist() /*Send all our users to the server group*/
 {
+	struct	chatrooms	*r;
+	struct	names		*n;
+	struct	pnames		*p;
+	struct	chat_packet	c;
 
+	r = chatroomhead;
+
+	while (r->next != NULL) {
+		n = r->next->names;
+
+		while (n->next != NULL) {
+			p = n->next->pnames;
+
+			while (p->next != NULL) {
+				c.type = 10;
+				strncpy(c.name, n->next->name, strlen(n->next->name) + 1);
+				strncpy(c.group, r->next->name, strlen(r->next->name) + 1);
+				strncpy(c.client_group, p->next->pname, strlen(p->next->pname) + 1);
+				c.server_id = p->next->server_id;
+
+				SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) (&c));
+			}
+		}
+	}
+}
+
+void filter_userlist(char *server) {
+	struct	chatrooms	*r;
+	struct	names		*n, *tempn;
+	struct	pnames		*p, *tempp;
+	int					server_id = atoi(&server[1]);
+
+	r = chatroomhead;
+
+	while (r->next != NULL) {
+		n = r->next->names;
+
+		while (n->next != NULL) {
+			p = n->next->pnames;
+
+			while (p->next != NULL) {
+				if (p->next->server_id == server_id) {
+					tempp = p->next;
+					tempp->next = tempp->next->next;
+					free(tempp);
+				}
+			}
+
+			if (n->next->pnames->next == NULL) {
+				tempn = n->next;
+				tempn->next = tempn->next->next;
+				free(tempn);
+			}
+		}
+	}
+	
 }
 
 void send_namelist(char *group, struct names *names)
@@ -724,7 +779,8 @@ void recv_update(int rvector[][6]) {
 	     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d ", min);
 	     for (j=1; j<6; j++)
 	     {
-		if (vector[j][i] > max)
+		
+if (vector[j][i] > max)
 		{
 		   max = vector[j][i];
 		   c = j;
@@ -902,6 +958,8 @@ if     ( Is_reg_memb_mess( service_type ) )
 				{
 				/*New server joined, send our user list */
 				  update_userlist();
+				} else if (Is_caused_leave_mess( service_type )) {
+					filter_userlist(memb_info.changed_member);
 				}
                             }
 			else if (strncmp(sender, connect_group, 2) == 0)
