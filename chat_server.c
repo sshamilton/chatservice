@@ -305,6 +305,7 @@ void recv_text(struct chat_packet *c) {
 	i = c->server_id - 1;
 	lsequence++;
 	c->sequence = lsequence * 10 + atoi(server); // give the like package a sequence.
+	vector[atoi(server)][atoi(server)] = c->sequence; //Update our vector.
 
 	array_ll_insert(c, i);
 
@@ -463,15 +464,18 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 	   printf("Received username change from other server name: %s, group %s\n", c->name, c->group);
            add_user(c->name, c->client_group, r->names, c->server_id);
            /* Inform any clients */
+	   bzero(groupname, MAX_GROUP_NAME);
 	   sprintf(groupname, "%s%d", c->group, atoi(server));
 	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
         }
         /* Recieved user leave from other server */
         else if (c->type == 11) {
+	  printf("Received request to remove %s from group %s\n", c->client_group, c->group);
 	   r = find_room(c->group);
            rm_user(c->client_group, r->names);
-	   sprintf(groupname, "%s%d", c->group, atoi(server));
+	   bzero(groupname, MAX_GROUP_NAME);
+	   sprintf(groupname, "%s%d\0", c->group, atoi(server));
 	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
         }
@@ -610,8 +614,11 @@ void update_userlist() /*Send all our users to the server group*/
 				c.server_id = p->next->server_id;
 
 				SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) (&c));
+			   p = p->next;
 			}
+		    n = n->next;
 		}
+	     r = r->next;
 	}
 }
 
@@ -631,18 +638,18 @@ void filter_userlist(char *server) {
 
 			while (p->next != NULL) {
 				if (p->next->server_id == server_id) {
-					tempp = p->next;
-					tempp->next = tempp->next->next;
-					free(tempp);
+					p->next = p->next->next;
 				}
+ 			  p = p->next;
 			}
 
 			if (n->next->pnames->next == NULL) {
-				tempn = n->next;
-				tempn->next = tempn->next->next;
-				free(tempn);
+				n->next = n->next->next;
+			  
 			}
+		   n = n->next;
 		}
+	     r = r->next;
 	}
 	
 }
@@ -834,10 +841,6 @@ void send_remove(char *pname, char *group)
 
 }
 void memb_change() {
-   if (lsequence > 0)
-   {
-     vector[atoi(server)][atoi(server)] = lsequence *10 + atoi(server);
-   }
    /*Send vector*/
    SP_multicast(Mbox, AGREED_MESS, "Servers", 10, sizeof(int)*36, (const char *)vector);
 }
@@ -974,7 +977,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 			    /*User joined a group, user should be added already, send user update to group*/
 			    /*Do update if we aren't joining */
 			    if (strncmp(Private_group, memb_info.changed_member, strlen(Private_group))) { 
-			  
+			      bzero(roomname, MAX_GROUP_NAME); 
   			      strncpy(roomname, sender, strlen(sender)-1); /*remove tacked on server id*/
 			      r = find_room(roomname);
 			      send_namelist(sender, r->names);
@@ -1129,6 +1132,7 @@ struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
 		return NULL;
 	}
 	char groupname[MAX_GROUP_NAME];
+	bzero(groupname, MAX_GROUP_NAME);
 	int ret;
 	rooms_tail->next = malloc(sizeof(struct chatrooms));
 	rooms_tail = rooms_tail->next;
@@ -1137,7 +1141,8 @@ struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
 	rooms_tail->tail = rooms_tail->head;
 	rooms_tail->names = malloc(sizeof(struct names));
         rooms_tail->names->pnames = malloc(sizeof(struct pnames));
-	strncpy(rooms_tail->name, room_name, strlen(room_name) + 1);
+	bzero(rooms_tail->name, MAX_GROUP_NAME);
+	strncpy(rooms_tail->name, room_name, strlen(room_name));
 	sprintf(groupname, "%s%d", room_name, atoi(server));
 	ret = SP_join(Mbox, groupname); /* Join room so we can see client connects/disconnects */
         if (ret < 0) SP_error(ret);

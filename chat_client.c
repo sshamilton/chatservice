@@ -380,16 +380,18 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    }
    else if (mess_type == 13) {
 	temp = chatroom_start;
+	int count= 0;
 	/* We need to put the merged chats in the correct order */
 	while (temp->next != NULL) {
+	  temp->next->sequence = count;/* for resequencing*/
 	  if (c->sequence < temp->next->data->sequence)
 	  {
 	     temp2 = temp->next;
              temp->next = malloc(sizeof(struct node));
              temp->next->data = malloc(sizeof(struct chat_packet));
              memcpy(temp->next->data, c, sizeof(struct chat_packet));
+	     temp->next->sequence = count; 
 	     temp->next->next = temp2;
-	     print_after(c->sequence);
 	     break;
 	  }
     	  temp = temp->next;
@@ -400,9 +402,21 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
            temp->next = malloc(sizeof(struct node));
            temp->next->data = malloc(sizeof(struct chat_packet));
            memcpy(temp->next->data, c, sizeof(struct chat_packet));
+	   temp->next->sequence = count;
            temp->next->next = temp2;
-	   print_after(c->sequence);
+	   chatroom_latest = temp->next; /*set latest to this new packet */ 
 	}
+	/*Renumber */
+	temp = chatroom_start;
+        while (temp->next !=NULL)
+	{
+ 	  count++;
+	  temp->next->sequence = count;
+	  temp = temp->next;
+	}
+	count++;
+	line_number = count;
+	print_after(c->sequence); /*Print out where we added the packet */
    }
    else if (c->type == 0 || c->type == 3) /*Message packet */
    {
