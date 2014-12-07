@@ -115,44 +115,76 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
   }
 }
 
+print_membership()
+{
+  struct chatrooms *r;
+  struct names *n;
+  struct pnames *p;
+
+  r = chatroomhead;
+  while (r->next != NULL)
+  {
+    printf("Room: %s\n", r->next->name);
+    n = r->next->names;
+    while (n->next != NULL)
+    {
+      p = n->next->pnames;
+      printf("name: %s", n->next->name);
+      while (p->next !=NULL)
+      {
+        printf("Pname: %s", p->next->pname);
+        p = p->next;
+      }
+      n = n->next;
+      printf("\n");
+    }
+    r = r->next;
+    printf("\n");
+  }
+}
+
 void rm_user(char *pname, struct names *names)
 {
+  printf("Membership before: \n");
+  print_membership();
   struct names *i, *t;
   struct pnames *p, *tempp;
   struct names *tempi;
   i = names;
-  int c = 0;
+  int c;
   int removed = 0;
   while (i->next != NULL)
     {
 	p = i->next->pnames;
+	c=0;
         while (p->next != NULL)
 	{
 	  c++;
 	  if (strncmp(p->next->pname, pname, strlen(pname)) == 0)
 	  {
 	    printf("Found pname.  C is %d, removing pname %s\n", c, pname);
-	    if (c == 1)
-	    {
-              /* only name in room, so take entire username out */
-	      tempi = i->next;
-	      i->next = i->next->next;
-	      free(tempi);
-	      break;
- 	    }
-	    else 
-            {
 	      /*Remove just this name */
 	      tempp = p->next;
 	      p->next = p->next->next;
 	      free(tempp);
 	      break;
-            }
 	  }
  	p = p->next;
 	}
+	if (i->next->pnames->next == NULL)
+            {
+              /* only name in room, so take entire username out */
+              tempi = i->next;
+   	      printf("Removing name %s", i->next->name);
+              i->next = i->next->next;
+              free(tempi);
+              break;
+            }
+
         if (i->next != NULL) i = i->next;
     }
+  printf("Membership After:\n");
+  print_membership();
 }
 
 void read_disk() {
@@ -526,6 +558,7 @@ void recv_join_msg(struct chat_packet *c) {
 	struct names *n;
 	char namelist[80];
 	r = find_room(groupname);
+ 	 printf("bpoint here\n");
         add_user(c->name, c->client_group, r->names, atoi(server));
  	/*Let other servers know the username was added */
         c->type = 10;
@@ -533,13 +566,13 @@ void recv_join_msg(struct chat_packet *c) {
 	strncpy(c->group, groupname, strlen(groupname)); /*Remove serverid from group */
         ret = SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
 	
-        i = r->head->next;
+        i = r->head;
 	n = r->names;
-        while (i != NULL)
+        while (i->next != NULL)
         {
-	  if (i->exists != 0) {
-		l = i->likes->next;
-		memcpy(&temp, i->data, sizeof(struct chat_packet));
+	  if (i->next->exists != 0) {
+		l = i->next->likes->next;
+		memcpy(&temp, i->next->data, sizeof(struct chat_packet));
 	        strcat(temp.group, server); /*Append server id for server's group */
 		/*count likes */
 		while (l != NULL) {
@@ -1037,15 +1070,19 @@ struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
 		return NULL;
 	}
 	char groupname[MAX_GROUP_NAME];
-
+	int ret;
 	rooms_tail->next = malloc(sizeof(struct chatrooms));
 	rooms_tail = rooms_tail->next;
-	rooms_tail->head = rooms_tail->tail = malloc(sizeof(struct node));
+	rooms_tail->head =  malloc(sizeof(struct node));
+	rooms_tail->head->next = NULL;
+	rooms_tail->tail = rooms_tail->head;
 	rooms_tail->names = malloc(sizeof(struct names));
         rooms_tail->names->pnames = malloc(sizeof(struct pnames));
 	strncpy(rooms_tail->name, room_name, strlen(room_name) + 1);
 	sprintf(groupname, "%s%d", room_name, atoi(server));
-	SP_join(Mbox, groupname); /* Join room so we can see client connects/disconnects */
+	ret = SP_join(Mbox, groupname); /* Join room so we can see client connects/disconnects */
+        if (ret < 0) SP_error(ret);
+        printf("Joined %s\n", groupname);
 	return rooms_tail;
 }
 
