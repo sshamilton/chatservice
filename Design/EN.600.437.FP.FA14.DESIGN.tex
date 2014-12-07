@@ -124,7 +124,7 @@ The point of this is so that after a partition and merge, servers know what info
 %int resend; //Set to 1 if the message is a resend for other servers
 %\end{lstlisting}
 %The message packet is utilized for both chat messages and likes created by a user.  The message packet will be saved to disk when received from spread, and the sequence number will be assigned upon receiving it from spread (it is null initially).
-\newpage
+
 
 \subsubsection{Server State Machine}
 \begin{center}
@@ -177,8 +177,7 @@ The incentive behind having this data structure is that a client process will on
 
 %\subsection{Server Operations}
 %We plan to have each server save every message it receives from a client to disk.  We will also have a file that contains messages from all servers that will be written every time there is a membership change.  Sequence numbers will be assigned to each message when it is received from Spread, and a client will not see their message until the server that put it into spread received the message and has a sequence number assigned to it.  Servers will continue to run during a partition.  When a partition merges, the partition that contained the lowest numbered server will have priority to send.  Each server will send its vector containing the highest number sequence from each server.  Each server will resend the messages from the lowest heard sequence for their server. The ordering will be maintained by the sequence number, and further ordering will be by process id to make all servers consistent. When these messages are sent, the resend flag is set so that these message do not get re-ordered, and then they are just added to the linked list for each server.\\
-\newpage
-\subsection{Client State Machine}
+
 
 \subsection{Client Data Structures}
 The client only has one data structure. A linked list of the messages that have occured in the chat room to which a client is a member. These messages are sorted in lamport timestamp order. Each of the nodes has the number of likes associated with that message as a part of the message data. This makes it very easy for the client process to output the contents of its chat room. One simply iterates through the nodes and prints out the username of the message's author, the text, and the number of likes.  The link list is destroyed each time a user leaves the chatroom, and a new one is created when the user joins a new chatroom.
