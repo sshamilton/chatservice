@@ -79,6 +79,7 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
 	 if (strncmp(p->next->pname, pname, strlen(pname)) ==0)
 	 {
 	   foundclient = 1;
+  	   break;
 	 }
 	p = p->next;
        }
@@ -164,9 +165,8 @@ void rm_user(char *pname, struct names *names)
 	  {
 	    printf("Found pname.  C is %d, removing pname %s\n", c, pname);
 	      /*Remove just this name */
-	      tempp = p->next;
+	      tempp = p->next; /* Used to free */
 	      p->next = p->next->next;
-	      free(tempp);
 	      break;
 	  }
  	p = p->next;
@@ -174,10 +174,9 @@ void rm_user(char *pname, struct names *names)
 	if (i->next->pnames->next == NULL)
             {
               /* only name in room, so take entire username out */
-              tempi = i->next;
+              tempi = i->next; /* Used to free */
    	      printf("Removing name %s", i->next->name);
               i->next = i->next->next;
-              free(tempi);
               break;
             }
 
@@ -465,6 +464,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
            add_user(c->name, c->client_group, r->names, c->server_id);
            /* Inform any clients */
 	   sprintf(groupname, "%s%d", c->group, atoi(server));
+	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
         }
         /* Recieved user leave from other server */
@@ -472,6 +472,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 	   r = find_room(c->group);
            rm_user(c->client_group, r->names);
 	   sprintf(groupname, "%s%d", c->group, atoi(server));
+	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
         }
         printf("Received text: %s\n", c->text);

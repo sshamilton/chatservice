@@ -50,7 +50,7 @@ char server_group[1];
 sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
 	if (strlen(chatroom) > 1 && connected > 0 && strlen(username) >0) 
 	{
-	 printf("Sending %s to group %s\n", mtext, chatroom);	
+	 //printf("Sending %s to group %s\n", mtext, chatroom);	
 		c->type = 0;//Chat message type
 		strncpy(c->text, mtext, strlen(mtext));
   		c->server_id = connected;
@@ -59,7 +59,7 @@ sprintf(server_group, "%d", connected); /*Convert server id to string for spread
 		c->sequence = 0; //Server updates this
 		//c->resend = 0; //Not sure we need this anymore
 		/* Send Message */
-		printf("Sending to group %s\n", server_group);
+		//printf("Sending to group %s\n", server_group);
 		ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
 		if( ret < 0 )
                 {
@@ -138,7 +138,7 @@ void join_server(char *server_id)
 	c->type = 2;//Request to join server
         strncpy(c->text, Private_group, strlen(Private_group));
         c->server_id = atoi(server_id);
-        printf("Sending private grup %s to server", Private_group);
+        //printf("Sending private grup %s to server", Private_group);
 	strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
         /* Send Message */
 	if (connected > 0)
@@ -185,7 +185,7 @@ void join_room(char *group)
   /* Send request to server to join a group */
   strncpy(c->client_group, Private_group, MAX_GROUP_NAME);
   strncpy(c->name, username, strlen(username));
-  printf("Sending join with %s", Private_group);
+  //printf("Sending join with %s", Private_group);
   strncpy(c->group, group, strlen(group));
   c->type = 5;
   ret = SP_multicast(Mbox, AGREED_MESS, server_group, 2, sizeof(struct chat_packet), (char *)c);
@@ -205,7 +205,7 @@ void print_history()
   {
     while (t->next != NULL)
     {
-    printf("%d: %s>%s (%u likes)LTS:%d\n", t->next->sequence, t->next->data->name, t->next->data->text, t->next->data->num_likes, t->next->data->sequence);
+    printf("%d: %s>%s (%u likes)\n", t->next->sequence, t->next->data->name, t->next->data->text, t->next->data->num_likes);
       t = t->next;
 	    }
 	  } 
@@ -214,6 +214,30 @@ void print_history()
     printf("You must be in a chatroom to view history!\n>");
   }
 }
+
+void print_after(int lts)
+{
+  struct node *t;
+  t = chatroom_start; /*Head pointer is assumed to be null */
+  printf("\n");
+  if (chatroom != NULL)
+  {
+    while (t->next != NULL)
+    {
+     if (t->next->data->sequence >= lts)
+     {
+      printf("%d: %s>%s (%u likes)\n", t->next->sequence, t->next->data->name, t->next->data->text, t->next->data->num_likes);
+     }
+    t = t->next;
+    }
+   printf("\n>");
+  }
+  else
+  {
+    printf("You must be in a chatroom to view history!\n>");
+  }
+}
+
 
 void show_servers()
 {
@@ -343,7 +367,6 @@ static	void	User_command()
 void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    int ret;
    struct node *temp, *temp2;
-   printf("Got packet type %d\n", c->type);
    if (mess_type == 0) { // If the mess_type is 0, that means we already have the chat_packet, we just want to update the likes.
 	temp = chatroom_start->next;
 	while (temp != NULL) {
@@ -353,6 +376,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 		}
 		temp = temp->next;
 	}
+	print_after(c->sequence);
    }
    else if (mess_type == 13) {
 	temp = chatroom_start;
@@ -365,9 +389,19 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
              temp->next->data = malloc(sizeof(struct chat_packet));
              memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	     temp->next->next = temp2;
+	     print_after(c->sequence);
 	     break;
 	  }
     	  temp = temp->next;
+	}
+        if (temp->next == NULL) /*We are at the end, so add the message */
+	{
+	   temp2 = temp->next;
+           temp->next = malloc(sizeof(struct node));
+           temp->next->data = malloc(sizeof(struct chat_packet));
+           memcpy(temp->next->data, c, sizeof(struct chat_packet));
+           temp->next->next = temp2;
+	   print_after(c->sequence);
 	}
    }
    else if (c->type == 0 || c->type == 3) /*Message packet */
@@ -380,33 +414,12 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
         if (c->type == 0) /* Live message, display it */
 	{
-	  printf("%d:%s> %s|LTS: %d",line_number, c->name, c->text, c->sequence);
+	  printf("%d:%s> %s (%d likes)\n>",line_number, c->name, c->text, c->num_likes);
 	}
    }
-/*   else if (c->type == 1) like message 
-   {
-       struct node *i;
-       struct likes *l;
-       printf("Got like message from user %s, for message %d, Text:%s", c->name, c->sequence, c->text);
-       i = chatroom_start->next;  Setup iterator 
-       printf("Istate: seq %u id: %u", i->data->sequence, i->data->server_id);
-       while ((i !=NULL) && ((i->data->sequence != c->sequence) || (i->data->server_id != c->server_id)))
-       {
-	 i = i->next; printf("LOOP\n");
-       }
-	 if (i != NULL)
-	 { printf("Data Seq: %u, serverid: %u\n", c->sequence, c->server_id);
-	   l = &(i->data->likes);
-           while (l->next != NULL) l = l->next;
-	   l->next = malloc(sizeof(struct likes));
-           strncpy(l->next->name, c->name, 20);  
-	   printf("Created like for msg:%s, seq:%u", i->data->text, i->data->sequence); 
-         }
-
-   }*/
    else if (c->type == 2)
    {
-	printf("Successful connection to server %d", c->server_id);
+	printf("Successful connection to server %d\n>", c->server_id);
 	connected = c->server_id;
    }
    else if (c->type == 5) /* Received response to join group */
@@ -417,7 +430,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
      strncpy(chatroom, c->group, strlen(c->group)-1); /*Remove server id from chatroom group name */
      chatroom_start = malloc(sizeof(struct node));
      chatroom_latest = chatroom_start;
-     printf("Successfully joined group %s", c->group-1); /* don't display server index at end of group */
+     printf("Successfully joined group %s\n>", chatroom); /* don't display server index at end of group */
      line_number = 0; /*Refresh line number */
    }
    else if (c->type == 6) /*Refresh screen all after lamport timestamp */
@@ -427,7 +440,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
      line_number = 0;
      while ((i !=NULL) && ((i->data->sequence != c->sequence) || (i->data->server_id != c->server_id)))
      {  line_number++;
-	i = i->next; (printf("LOOP"));
+	i = i->next;
      }
      while (i != NULL)
     {
@@ -437,11 +450,11 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    }
    else if (c->type == 8) /*Display servers online */
    {
-	printf("Servers that are online are: %s", c->text);
+	printf("Servers that are online are: %s\n>", c->text);
    }
    else if (c->type == 9) /*Updated name list for chatroom */
    {
-	printf("Members in chatroom are now: %s", c->text);
+	printf("Members in chatroom are now: %s\n>", c->text);
    }
 
 }
@@ -469,7 +482,6 @@ static  char             mess[MAX_MESSLEN];
 
         ret = SP_receive( Mbox, &service_type, sender, 100, &num_groups, target_groups, 
                 &mess_type, &endian_mismatch, sizeof(mess), mess );
-        //printf("\n============================\n");
         if( ret < 0 ) 
         {
                 if ( (ret == GROUPS_TOO_SHORT) || (ret == BUFFER_TOO_SHORT) ) {
@@ -492,12 +504,6 @@ if (ret < 0 )
         if( Is_regular_mess( service_type ) )
         {
                 mess[ret] = 0;
-                if     ( Is_unreliable_mess( service_type ) ) printf("received UNRELIABLE ");
-                else if( Is_reliable_mess(   service_type ) ) printf("received RELIABLE ");
-                else if( Is_fifo_mess(       service_type ) ) printf("received FIFO ");
-                else if( Is_causal_mess(     service_type ) ) printf("received CAUSAL ");
-                //else if( Is_agreed_mess(     service_type ) ) printf("received AGREED ");
-                else if( Is_safe_mess(       service_type ) ) printf("received SAFE ");
                 //printf("message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
                 //        sender, mess_type, endian_mismatch, num_groups, ret, mess ); 
 	 	//printf("private group is %s\n", Private_group);
@@ -513,28 +519,28 @@ if (ret < 0 )
                         SP_error( ret );
                         exit( 1 );
                 }
-if     ( Is_reg_memb_mess( service_type ) )
+	if     ( Is_reg_memb_mess( service_type ) )
                 {
-                        printf("Received REGULAR membership for group %s with %d members, where I am member %d:\n",
-                                sender, num_groups, mess_type );
-                        for( i=0; i < num_groups; i++ )
-                                printf("\t%s\n", &target_groups[i][0] );
-                        printf("grp id is %d %d %d\n",memb_info.gid.id[0], memb_info.gid.id[1], memb_info.gid.id[2] );
+                        //printf("Received REGULAR membership for group %s with %d members, where I am member %d:\n",
+                        //        sender, num_groups, mess_type );
+                        //for( i=0; i < num_groups; i++ )
+                        //        printf("\t%s\n", &target_groups[i][0] );
+                        //printf("grp id is %d %d %d\n",memb_info.gid.id[0], memb_info.gid.id[1], memb_info.gid.id[2] );
 			sprintf(server_group, "c%d", connected);
 			if (strncmp(sender, server_group, 2) == 0)
 			{
-			  printf("Server connection message\n");
+			  //printf("Server connection message\n");
 			  for (i=0; i< num_groups; i++)
 			  {
 			    if (target_groups[i][1] == server_group[1])
 			    {
-				printf("Successfully connected to server %d\n", connected);
+				printf("Successfully connected to server %d\n>", connected);
 				success = 1;
 			    }
 			  }
 			  if (!success)
 			  {
-				printf("Server unavailable.  Please try again later.\n");
+				printf("Server unavailable.  Please try again later.\n>");
 				SP_leave(Mbox, sender);
 			  }
 			}
@@ -544,11 +550,11 @@ if     ( Is_reg_memb_mess( service_type ) )
 			}
                         if( Is_caused_join_mess( service_type ) )
                         {
-                                printf("Due to the JOIN of %s\n", memb_info.changed_member );
+                                //printf("Due to the JOIN of %s\n", memb_info.changed_member );
                         }else if( Is_caused_leave_mess( service_type ) ){
-                                printf("Due to the LEAVE of %s\n", memb_info.changed_member );
+                                //printf("Due to the LEAVE of %s\n", memb_info.changed_member );
                         }else if( Is_caused_disconnect_mess( service_type ) ){
-                                printf("Due to the DISCONNECT of %s\n", memb_info.changed_member );
+                                //printf("Due to the DISCONNECT of %s\n", memb_info.changed_member );
 			        if (strncmp(sender, server_group, 2) == 0 && memb_info.changed_member[1] == server_group[1])
 				{
 				  printf("Disconnected from server %s\n", server_group);
@@ -563,7 +569,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 				  connected = 0; /*we are no longer connected */
 				}
                         }else if( Is_caused_network_mess( service_type ) ){
-                                printf("Due to NETWORK change with %u VS sets\n", memb_info.num_vs_sets);
+                                //printf("Due to NETWORK change with %u VS sets\n", memb_info.num_vs_sets);
                                 num_vs_sets = SP_get_vs_sets_info( mess, &vssets[0], MAX_VSSETS, &my_vsset_index );
                                 if (num_vs_sets < 0) {
                                         printf("BUG: membership message has more then %d vs sets. Recompile with larger MAX_VSSETS\n", MAX_VSSETS);
@@ -585,20 +591,17 @@ if     ( Is_reg_memb_mess( service_type ) )
                                                 printf("\t%s\n", members[j] );
                                 }
                         }
-                }else if( Is_transition_mess(   service_type ) ) {
-                        printf("received TRANSITIONAL membership for group %s\n", sender );
-                }else if( Is_caused_leave_mess( service_type ) ){
-                        printf("received membership message that left group %s\n", sender );
-                }else printf("received incorrecty membership message of type 0x%x\n", service_type );
-        } else if ( Is_reject_mess( service_type ) )
-        {
-                printf("REJECTED message from %s, of servicetype 0x%x messtype %d, (endian %d) to %d groups \n(%d bytes): %s\n",
-                        sender, service_type, mess_type, endian_mismatch, num_groups, ret, mess );
-        }else printf("received message of unknown message type 0x%x with ret %d\n", service_type, ret);
-
-
-        printf("\n");
-        printf("> ");
+		}
+                
+		else if( Is_transition_mess( service_type ) ) {
+                        //printf("received TRANSITIONAL membership for group %s\n", sender );
+                }else if ( Is_caused_leave_mess( service_type ) ){
+                        //printf("received membership message that left group %s\n", sender );
+		} else printf("Incorrect mess type");
+		
+        }  else if (Is_reject_mess( service_type)) {
+		printf("Rejcted");
+	}  else printf("Unknown");
         fflush(stdout);
 }
 
@@ -625,8 +628,6 @@ void main()
   {
     E_handle_events();
     User_command();
-    E_attach_fd( 0, READ_FD, User_command, 0, NULL, LOW_PRIORITY );
-    E_attach_fd( Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY );
   }
   exit (0);
 }
