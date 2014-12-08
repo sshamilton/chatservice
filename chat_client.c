@@ -46,7 +46,7 @@ void send_msg(char *mtext)
 int ret;
 struct chat_packet *c;
 char group[80];
-c = malloc(sizeof(struct chat_packet));
+c = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 char server_group[1];
 sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/
 	if (strlen(chatroom) > 1 && connected > 0 && strlen(username) >0) 
@@ -84,7 +84,7 @@ sprintf(server_group, "%d", connected); /*Convert server id to string for spread
 void like_msg(int like, int ul)
 {
 	int ret;
-	struct chat_packet *c = malloc(sizeof(struct chat_packet));
+	struct chat_packet *c = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 	struct node *i = chatroom_start->next;
 	char server_group[1];
 	if (like > line_number) {
@@ -134,8 +134,8 @@ void join_server(char *server_id)
         int16            mess_type;
         int              endian_mismatch;
 	char		group[80];
-	c = malloc(sizeof(struct chat_packet));
-	r = malloc(sizeof(struct chat_packet));
+	c = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
+	r = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 	c->type = 2;//Request to join server
         strncpy(c->text, Private_group, strlen(Private_group));
         c->server_id = atoi(server_id);
@@ -278,7 +278,7 @@ void show_servers()
 	int ret;
         struct chat_packet *c;
 	char server_group[1];
-        c = malloc(sizeof(struct chat_packet));
+        c = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 	c->type = 8;//Request online server list.
         c->server_id = connected;
         strncpy(c->name, username, strlen(username));
@@ -434,8 +434,8 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
         if (temp->next == NULL) /*We are at the end, so add the message */
 	{
 	   temp2 = temp->next;
-           temp->next = malloc(sizeof(struct node));
-           temp->next->data = malloc(sizeof(struct chat_packet));
+           temp->next = (struct node *)calloc(1,sizeof(struct node));
+           temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
            memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	   temp->next->sequence = count;
 	   temp2->previous = temp->next; /*Double link list added for traversal on 25 chat lines */
@@ -457,10 +457,10 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    else if (c->type == 0 || c->type == 3) /*Message packet */
    {
 	if (c->type == 0) line_number++; /*Only update line number on text message */
-	chatroom_latest->next = malloc(sizeof(struct node));	
+	chatroom_latest->next = (struct node *)calloc(1,sizeof(struct node));	
 	chatroom_latest->next->previous = chatroom_latest; 
 	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
-        chatroom_latest->data = malloc(sizeof(struct chat_packet));
+        chatroom_latest->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
         chatroom_latest->sequence = line_number;
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
         if (c->type == 0) /* Live message, display it */
@@ -618,7 +618,7 @@ if (ret < 0 )
 				    sprintf(chatroom, "%s%d",chatroom, connected);
 				    SP_leave(Mbox, chatroom);
 				    chatroom[0]='\0';
-				    chatroom_start = malloc(sizeof(struct node));
+				    chatroom_start = (struct node *)calloc(1,sizeof(struct node));
 				  }
 				  connected = 0; /*we are no longer connected */
 				}

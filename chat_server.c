@@ -816,7 +816,7 @@ void recv_update(int rvector[][6]) {
  	       }
 	     }
 	    }
-	     if (c == atoi(server)) /*We have the latest, so send all after min LTS */
+	     if (c == atoi(server)  && servers_online[i] && min < max) /*We have the latest, so send all after min LTS */
 	     {
 		send_all_after(min, i);printf("Sent all after %d for server %d\n", min, s);
 	     }
@@ -968,7 +968,8 @@ if     ( Is_reg_memb_mess( service_type ) )
 				{
 				/*New server joined, send our user list */
 				  update_userlist();
-				} else if (Is_caused_disconnect_mess( service_type )) {
+				} else if (Is_caused_disconnect_mess( service_type ) || 
+					   Is_caused_network_mess( service_type) ) {
 			 		printf("Filtering out users from server %s\n", memb_info.changed_member);
 					filter_userlist(memb_info.changed_member);
 				 	update_userlist();  /*Let client know. */
