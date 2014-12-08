@@ -219,7 +219,6 @@ void print_after(int lts)
 {
   struct node *t;
   t = chatroom_start; /*Head pointer is assumed to be null */
-  printf("\n");
   if (chatroom != NULL)
   {
     while (t->next != NULL)
@@ -414,9 +413,8 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	  temp->next->sequence = count;
 	  temp = temp->next;
 	}
-	count++;
 	line_number = count;
-	print_after(c->sequence); /*Print out where we added the packet */
+	print_after(c->sequence); /*Print out where we added the packet (for dispaly consistency)*/
    }
    else if (c->type == 0 || c->type == 3) /*Message packet */
    {

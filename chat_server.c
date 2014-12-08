@@ -540,6 +540,8 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 		printf("Packet received already.\n");
 	}
 
+  /*Show the vector so we can compare it to other servers*/
+  showmatrix((int(*) [6]) vector);
 }
 
 void recv_join_msg(struct chat_packet *c) {
@@ -783,33 +785,33 @@ void recv_update(int rvector[][6]) {
 	
 	   for (i = 1; i<6; i++)
 	   {
+	   if (servers_online[i]) /* Only calculate vectors from servers that are online */
+           {
 	     max=0;
 	     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d ", min);
 	     for (j=1; j<6; j++)
 	     {
-		
-if (vector[j][i] > max)
-		{
+	       if (servers_online[i]) /* Only calculate vectors from servers that are online */	
+	       {
+ 	         if (vector[j][i] > max)
+	  	  {
 		   max = vector[j][i];
 		   c = j;
 		   printf("Max: %d ", max);
-		}
-		if (vector[j][i] < min)
-	        {
+		  }
+		  if (vector[j][i] < min)
+	          {
 		   min = vector[j][i]; printf("R%d\n", min);
 		   s = j; /* Server who needs it */
-	        }
+	          }
+ 	       }
 	     }
-	
+	    }
 	     if (c == atoi(server)) /*We have the latest, so send all after min LTS */
 	     {
 		send_all_after(min, i);printf("Sent all after %d for server %d\n", min, s);
 	     }
 	   }
-	
-	 printf("Final vector:\n");
-	 showmatrix((int(*) [6]) vector);
-	
 	}
 
 }
@@ -947,15 +949,6 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 servers_available = num_groups;  /*To determine how many servers to update */
                                 printf("Running membership change\n");
                                 /*Update servers online*/
-                                /*Clear out array and other vectors */
-                                for (i=0; i< 7; i++)
-                                {
-                                    servers_online[i] = 0;
-				    if (i != atoi(server)) /*Clear out other vectors except ours */
-				    {
-					vector[i][1] = 0; vector[i][2] =0; vector[i][3] = 0; vector[i][4]=0; vector[i][5] =0;
-				    }
-                                }
                                 printf("Serv online...numgrp=%d\n", num_groups);
                                 for (i=0; i < num_groups; i++)
                                 {  printf("Server %c online\n", target_groups[i][1] );
@@ -1104,15 +1097,12 @@ for (i=1; i<7; i++)
   }
  printf("\n");
 }
-
-
   /*
    * File setup. Note that the files will just be named after the server
    * to which the file belongs. First tries to open an existing file to
    * read from and write to. If file does not exist, creates a new file for
    * writing
    *
-   * Future updates: create a more useful file name.
    */
   if ((fp = fopen(argv[1], "r+")) == NULL) {
     fp = fopen(argv[1], "w");
@@ -1190,7 +1180,6 @@ struct node * find_insert_slot(int target_stamp, struct chatrooms *room) {
 /* Creates an empty node used for chatrooms. */
 struct node * empty_chatroom_node() {
 	struct node *temp = malloc(sizeof(struct node));
-
 	temp->data = malloc(sizeof(struct chat_packet));
 	temp->likes = malloc(sizeof(struct likes));
 	temp->exists = 0;
@@ -1205,7 +1194,6 @@ struct node * chatroom_insert_msg(struct chat_packet *msg) {
 
 	if (strlen(msg->group) == 0) {
 		printf("An error occurred due to a nonspecified room name");
-
 		return NULL;
 	}
 
@@ -1218,7 +1206,6 @@ struct node * chatroom_insert_msg(struct chat_packet *msg) {
 	slot = find_insert_slot(msg->sequence, room);
 	if (slot->next != NULL && slot->next->sequence == msg->sequence) {
 		printf("An error occured inserting a message into the chatroom data structure\n");
-
 		return NULL;
 	}
 
@@ -1248,7 +1235,6 @@ void array_ll_insert(struct chat_packet *msg, int server) {
 /* Finds the message which is to be liked and returns the head of the likes */
 struct node * find_desired_msg(int target_stamp, struct chatrooms *room) {
 	struct node *temp, *temp2;
-
 	temp = room->head;
 	while (temp->next != NULL) {
 		if (target_stamp == temp->next->data->sequence) {
@@ -1268,7 +1254,6 @@ struct node * find_desired_msg(int target_stamp, struct chatrooms *room) {
 
 struct likes * find_user_like(char *username, struct likes *head) {
 	struct likes *temp;
-
 	temp = head;
 	while (temp->next != NULL) {
 		if (strcmp(username, temp->next->name) == 0) {
@@ -1298,7 +1283,6 @@ struct node * chatroom_process_like(struct chat_packet *msg) {
 	}
 
 	target_like = find_user_like(msg->name, target_msg->likes);
-
 	if (msg->sequence > target_like->like_timestamp) {
 		if (msg->type == 1) {
 			target_like->like = 1;
