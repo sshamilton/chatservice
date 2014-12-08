@@ -959,8 +959,10 @@ if     ( Is_reg_memb_mess( service_type ) )
 				{
 				/*New server joined, send our user list */
 				  update_userlist();
-				} else if (Is_caused_leave_mess( service_type )) {
+				} else if (Is_caused_disconnect_mess( service_type )) {
+			 		printf("Filtering out users from server %s\n", memb_info.changed_member);
 					filter_userlist(memb_info.changed_member);
+				 	update_userlist();  /*Let client know. */
 				}
                             }
 			else if (strncmp(sender, connect_group, 2) == 0)
@@ -980,7 +982,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 			      send_namelist(sender, r->names);
 			     }
 			  }
-			  else if (Is_caused_leave_mess( service_type ))
+			  else if (Is_caused_leave_mess( service_type ) || Is_caused_disconnect_mess(service_type))
 			 {
 			    strncpy(roomname, sender, strlen(sender)-1);
 			     r = find_room(roomname);

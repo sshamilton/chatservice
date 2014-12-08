@@ -16,6 +16,7 @@ static  int     line_number=0;
 static  struct  node* chatroom_start;
 static  struct  node* chatroom_latest;
 static  void    Read_message();
+static  char    attendees[80];
 
 void show_menu()
 {
@@ -158,13 +159,47 @@ void join_server(char *server_id)
         }
 }
 
+void refresh_display()
+{
+  int maxlines = 25;
+  int c = 0;
+  struct node * i;
+
+  i = chatroom_latest;
+  system("clear"); /*Clear the screeen*/
+  printf("Room: %s\n", chatroom);
+  printf("Attendees: %s\n", attendees);
+  while (i->previous != NULL && c < 25)
+  {
+     i = i->previous; /*Go back 25 or beginning */
+     c++;
+  }
+  while (i->next != NULL) 
+  {
+    if (i->next->data->num_likes > 0)
+    {
+      printf("%d. %s: %-80s Likes %d\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
+    }
+    else 
+    {
+      printf("%d. %s: %s\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
+    }
+   i = i->next;
+  }
+  printf("\n>");
+}
+
 void join_room(char *group)
 {
   int ret;
   struct chat_packet *c;
   char server_group[1];
   sprintf(server_group, "%d", connected); /*Convert server id to string for spread groupname*/ 
-  c = malloc(sizeof(struct chat_packet));
+  //c = malloc(sizeof(struct chat_packet));
+  //
+  //bzero(c, sizeof(struct chat_packet));
+  c = (struct chat_packet *) calloc(1, sizeof(struct chat_packet)); /*better than malloc, zeros out memory*/
+
   if ( group == "1" || group == "2" || group == "3" || group == "4" || group == "5")
   {
     printf("Chatrooms cannot be 1-5.  These are reserved\n>");
@@ -375,7 +410,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 		}
 		temp = temp->next;
 	}
-	print_after(c->sequence);
+	refresh_display();
    }
    else if (mess_type == 13) {
 	temp = chatroom_start;
@@ -386,10 +421,11 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	  if (c->sequence < temp->next->data->sequence)
 	  {
 	     temp2 = temp->next;
-             temp->next = malloc(sizeof(struct node));
-             temp->next->data = malloc(sizeof(struct chat_packet));
+             temp->next = (struct node *)calloc(1,sizeof(struct node));
+             temp->next->data = (struct chat_packet *)calloc(1, sizeof(struct chat_packet));
              memcpy(temp->next->data, c, sizeof(struct chat_packet));
-	     temp->next->sequence = count; 
+	     temp->next->sequence = count;
+	     temp2->previous = temp->next; /*Double link list added for traversal on 25 chat lines */ 
 	     temp->next->next = temp2;
 	     break;
 	  }
@@ -402,6 +438,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
            temp->next->data = malloc(sizeof(struct chat_packet));
            memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	   temp->next->sequence = count;
+	   temp2->previous = temp->next; /*Double link list added for traversal on 25 chat lines */
            temp->next->next = temp2;
 	   chatroom_latest = temp->next; /*set latest to this new packet */ 
 	}
@@ -414,19 +451,21 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	  temp = temp->next;
 	}
 	line_number = count;
-	print_after(c->sequence); /*Print out where we added the packet (for dispaly consistency)*/
+        refresh_display();
+	//print_after(c->sequence); /*Print out where we added the packet (for dispaly consistency)*/
    }
    else if (c->type == 0 || c->type == 3) /*Message packet */
    {
 	if (c->type == 0) line_number++; /*Only update line number on text message */
 	chatroom_latest->next = malloc(sizeof(struct node));	
+	chatroom_latest->next->previous = chatroom_latest; 
 	chatroom_latest = chatroom_latest->next; /*Advance the pointer */
         chatroom_latest->data = malloc(sizeof(struct chat_packet));
         chatroom_latest->sequence = line_number;
 	memcpy(chatroom_latest->data, c, sizeof(struct chat_packet));
         if (c->type == 0) /* Live message, display it */
 	{
-	  printf("%d:%s> %s (%d likes)\n>",line_number, c->name, c->text, c->num_likes);
+          refresh_display();
 	}
    }
    else if (c->type == 2)
@@ -440,12 +479,12 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
      if( ret < 0 ) SP_error( ret );
      bzero(chatroom, MAX_GROUP_NAME);
      strncpy(chatroom, c->group, strlen(c->group)-1); /*Remove server id from chatroom group name */
-     chatroom_start = malloc(sizeof(struct node));
+     chatroom_start = (struct node *)calloc(1, sizeof(struct node));
      chatroom_latest = chatroom_start;
      printf("Successfully joined group %s\n>", chatroom); /* don't display server index at end of group */
      line_number = 0; /*Refresh line number */
    }
-   else if (c->type == 6) /*Refresh screen all after lamport timestamp */
+   else if (c->type == 6) /*Refresh screen all after lamport timestamp */  /*No longer necessary*/
    {
      struct node *i;
      i = chatroom_start->next; /* Setup iterator */
@@ -466,7 +505,10 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
    }
    else if (c->type == 9) /*Updated name list for chatroom */
    {
-	printf("Members in chatroom are now: %s\n>", c->text);
+	bzero(attendees, 80);
+	strncpy(attendees, c->text, strlen(c->text));
+	//printf("Members in chatroom are now: %s\n>", c->text); Moved to display.
+	refresh_display();
    }
 
 }
@@ -621,6 +663,7 @@ void main()
 {
   int ret;
   E_init();
+  system("clear");
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;

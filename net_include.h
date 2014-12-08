@@ -63,6 +63,7 @@ struct chatrooms {
 struct node {
   struct chat_packet* data;
   struct node*        next;
+  struct node*        previous;
   struct likes*	      likes;
   int    sequence; /*Client line sequence number */
   int	 exists;
