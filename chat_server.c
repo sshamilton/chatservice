@@ -70,13 +70,13 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
   
   while (i->next != NULL)
   {
-     if (strncmp(i->next->name, name, strlen(name)) == 0)
+     if (strcmp(i->next->name, name) == 0)
      {
        printf("User exists. Look for pname\n");
        p = i->next->pnames;
        while (p->next != NULL)
        {
-	 if (strncmp(p->next->pname, pname, strlen(pname)) ==0)
+	 if (strcmp(p->next->pname, pname) ==0)
 	 {
 	   foundclient = 1;
   	   break;
@@ -161,7 +161,7 @@ void rm_user(char *pname, struct names *names)
         while (p->next != NULL)
 	{
 	  c++;
-	  if (strncmp(p->next->pname, pname, strlen(pname)) == 0)
+	  if (strcmp(p->next->pname, pname) == 0)
 	  {
 	    printf("Found pname.  C is %d, removing pname %s\n", c, pname);
 	      /*Remove just this name */
@@ -338,11 +338,11 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 	        r = chatroomhead;
 
 		// Find the correct group.
-	        while (r->next != NULL && (strncmp(r->name, c->group, strlen(c->group)) != 0))
+	        while (r->next != NULL && (strcmp(r->name, c->group) != 0))
 	        {
 	          r = r->next;
 	        }
-		if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
+		if (strcmp(r->name, c->group) != 0) /*Chat room doesn't exist*/
 	        {
 	          r->next = (struct chatrooms *)calloc(1,sizeof(struct chatrooms));
 	          r = r->next;
@@ -357,7 +357,7 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 				l = temp->next->likes;
 				while (l->next != NULL) {
 				  /* find the user who liked && check if the timestamp is larger */
-				  if (strncmp(l->next->name, c->name, strlen(c->name)) == 0) {
+				  if (strcmp(l->next->name, c->name) == 0) {
 					if (l->next->like_timestamp > c->sequence) break; // Break if the like_timestamp is larger than the chat_packet's
 					if (c->type == 7) {
 					  l->next->like = 0;

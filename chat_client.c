@@ -694,4 +694,3 @@ static  void	Bye()
 	SP_disconnect( Mbox );
 	exit( 0 );
 }
-
