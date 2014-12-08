@@ -414,7 +414,6 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	  temp->next->sequence = count;
 	  temp = temp->next;
 	}
-	count++;
 	line_number = count;
 	print_after(c->sequence); /*Print out where we added the packet */
    }
@@ -653,4 +652,3 @@ static  void	Bye()
 	SP_disconnect( Mbox );
 	exit( 0 );
 }
-
