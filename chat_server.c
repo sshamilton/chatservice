@@ -25,6 +25,7 @@ void recv_client_msg();
 void write_data();
 void memb_change();
 void showmatrix(int rvector[][6]);
+void send_allnames();
 void send_namelist(char *group, struct names *names);
 struct node * empty_chatroom_node();
 // Insert into the array of linked lists.
@@ -624,11 +625,10 @@ void update_userlist() /*Send all our users to the server group*/
 	}
 }
 
-void filter_userlist(char *server) {
+void filter_userlist(int server_id) {
 	struct	chatrooms	*r;
 	struct	names		*n, *tempn;
 	struct	pnames		*p, *tempp;
-	int					server_id = atoi(&server[1]);
 
 	r = chatroomhead;
 
@@ -959,6 +959,9 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 printf("Running membership change\n");
                                 /*Update servers online*/
                                 printf("Serv online...numgrp=%d\n", num_groups);
+				/* Zero out server array */
+				for (i=1;i < 6; i++) servers_online[i] = 0;
+				/* Update those online */
                                 for (i=0; i < num_groups; i++)
                                 {  printf("Server %c online\n", target_groups[i][1] );
                                   servers_online[atoi(&target_groups[i][1])] = 1;
@@ -970,9 +973,16 @@ if     ( Is_reg_memb_mess( service_type ) )
 				  update_userlist();
 				} else if (Is_caused_disconnect_mess( service_type ) || 
 					   Is_caused_network_mess( service_type) ) {
-			 		printf("Filtering out users from server %s\n", memb_info.changed_member);
-					filter_userlist(memb_info.changed_member);
-				 	update_userlist();  /*Let client know. */
+					for (i=1; i < 6; i++)
+			 		{
+					  if (servers_online[i]==0) /* Server is offline, remove users */
+					  {
+						  printf("Filtering out users from server %d\n", i);
+						  filter_userlist(i);
+					  }
+					}
+				 	 /*Let client know. */
+					send_allnames();
 				}
                             }
 			else if (strncmp(sender, connect_group, 2) == 0)
@@ -1171,6 +1181,14 @@ struct chatrooms * find_room(char *room_name) {
 	}
 
 	return create_room(room_name, temp);
+}
+
+void send_allnames() {
+   struct chatrooms *temp = chatroomhead;
+   while (temp->next != NULL) {
+      send_namelist(temp->next->name, temp->next->names);
+     temp = temp->next;
+   }
 }
 
 /* 

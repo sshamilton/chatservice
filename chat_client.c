@@ -425,7 +425,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
              temp->next->data = (struct chat_packet *)calloc(1, sizeof(struct chat_packet));
              memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	     temp->next->sequence = count;
-	     temp2->previous = temp->next; /*Double link list added for traversal on 25 chat lines */ 
+	     temp->next->previous = temp; /*Double link list added for traversal on 25 chat lines */ 
 	     temp->next->next = temp2;
 	     break;
 	  }
@@ -438,7 +438,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
            temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
            memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	   temp->next->sequence = count;
-	   temp2->previous = temp->next; /*Double link list added for traversal on 25 chat lines */
+	   temp->next->previous = temp; /*Double link list added for traversal on 25 chat lines */
            temp->next->next = temp2;
 	   chatroom_latest = temp->next; /*set latest to this new packet */ 
 	}
