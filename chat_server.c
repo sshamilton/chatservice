@@ -91,10 +91,10 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
   if (!founduser)
   {
      printf("Adding user to array\n");
-     i->next = malloc(sizeof(struct names));
+     i->next = (struct names *)calloc(1,sizeof(struct names));
      strncpy(i->next->name, name, strlen(name));
-     i->next->pnames = malloc(sizeof(struct pnames));
-     i->next->pnames->next = malloc(sizeof(struct pnames));
+     i->next->pnames = (struct pnames *)calloc(1,sizeof(struct pnames));
+     i->next->pnames->next = (struct pnames *)calloc(1,sizeof(struct pnames));
      strncpy(i->next->pnames->next->pname, pname, strlen(pname));
      i->next->pnames->next->server_id = server_id;
   }
@@ -106,7 +106,7 @@ void add_user(char *name, char *pname, struct names *names, int server_id)
      {
        p = p->next;
      }
-     p->next = malloc(sizeof(struct pnames));
+     p->next = (struct pnames *)calloc(1,sizeof(struct pnames));
      strncpy(p->next->pname, pname, strlen(pname));
 	 p->next->server_id = server_id;
   }
@@ -332,8 +332,8 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 		if (c->sequence > (lsequence * 10)) {
 			lsequence = c->sequence / 10;
 		}
-	        Last_packets[c->server_id - 1]->next = malloc(sizeof(struct node));
-	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
+	        Last_packets[c->server_id - 1]->next = (struct node *)calloc(1,sizeof(struct node));
+	        Last_packets[c->server_id - 1]->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
 	        r = chatroomhead;
 
@@ -344,9 +344,9 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 	        }
 		if (strncmp(r->name, c->group, strlen(c->group)) != 0) /*Chat room doesn't exist*/
 	        {
-	          r->next = malloc(sizeof(struct chatrooms));
+	          r->next = (struct chatrooms *)calloc(1,sizeof(struct chatrooms));
 	          r = r->next;
-	          r->head = malloc(sizeof(struct node));
+	          r->head = (struct node *)calloc(1,sizeof(struct node));
 	          r->tail = r->head;
 	          strncpy(r->name, c->group, strlen(c->group)); /*Copy name to chatroom */
 	        }
@@ -372,7 +372,7 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 				}
 	
 				if (l->next == NULL) {
-				  l->next = malloc(sizeof(struct likes));
+				  l->next = (struct likes *)calloc(1,sizeof(struct likes));
 				  l = l->next;
 				  if (c->type == 7) {
 				    l->like = 0;
@@ -387,14 +387,14 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 			}
 			else if (c->lts < temp->next->data->sequence) { /*received a like for a nonreceived chat_packet so create a placeholder with node.exists = 0*/
 				temp2 = temp->next;
-				temp->next = malloc(sizeof(struct node));
-				temp->next->data = malloc(sizeof(struct chat_packet));
+				temp->next = (struct node *)calloc(1,sizeof(struct node));
+				temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 				temp->next->data->sequence = c->lts; // This is the LTS of the chat_packet that is supposed to go here
 				temp->next->exists = 0; // This chat_packet has not be received
 				temp->next->next = temp2;
-				temp->next->likes = malloc(sizeof(struct likes)); // First "likes" is an empty head node
+				temp->next->likes = (struct likes *)calloc(1,sizeof(struct likes)); // First "likes" is an empty head node
 				l = temp->next->likes;
-				l->next = malloc(sizeof(struct likes));
+				l->next = (struct likes *)calloc(1,sizeof(struct likes));
 				l = l->next;
 				if (c->type == 7) {
 				  l->like = 0;
@@ -411,14 +411,14 @@ void recv_server_like(struct chat_packet *c, int16 mess_type) {
 		// If the message to like is nonexistant but it would be inserted at the end of the linked list:
 		if (temp->next == NULL) {
 			temp2 = temp->next;
-			temp->next = malloc(sizeof(struct node));
-			temp->next->data = malloc(sizeof(struct chat_packet));
+			temp->next = (struct node *)calloc(1,sizeof(struct node));
+			temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 			temp->next->data->sequence = c->lts; // This is the LTS of the chat_packet that is supposed to go here
 			temp->next->exists = 0; // This chat_packet has not be received
 			temp->next->next = temp2;
-			temp->next->likes = malloc(sizeof(struct likes)); // First "likes" is an empty head node
+			temp->next->likes = (struct likes *)calloc(1,sizeof(struct likes)); // First "likes" is an empty head node
 			l = temp->next->likes;
-			l->next = malloc(sizeof(struct likes));
+			l->next = (struct likes *)calloc(1,sizeof(struct likes));
 			l = l->next;
 			if (c->type == 7) {
 			  l->like = 0;
@@ -490,8 +490,8 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 		if (c->sequence > (lsequence * 10)) {
 			lsequence = c->sequence / 10;
 		}
-	        Last_packets[c->server_id - 1]->next = malloc(sizeof(struct node));
-	        Last_packets[c->server_id - 1]->next->data = malloc(sizeof(struct chat_packet));
+	        Last_packets[c->server_id - 1]->next = (struct node *)calloc(1,sizeof(struct node));
+	        Last_packets[c->server_id - 1]->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
 	        memcpy(Last_packets[c->server_id - 1]->next->data, c, sizeof(struct chat_packet));
 		// find the correct group (chatroom)
 	        r = find_room(c->group);
@@ -501,9 +501,9 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 			if (c->sequence < temp->next->data->sequence) {
 				/*stitching */
 				temp2 = temp->next;
-				temp->next = malloc(sizeof(struct node));
-				temp->next->data = malloc(sizeof(struct chat_packet));
-				temp->next->likes = malloc(sizeof(struct likes));
+				temp->next = (struct node *)calloc(1,sizeof(struct node));
+				temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
+				temp->next->likes = (struct likes *)calloc(1,sizeof(struct likes));
 				temp->next->exists = 1;
 				memcpy(temp->next->data, c, sizeof(struct chat_packet));
 				temp->next->next = temp2;
@@ -517,9 +517,9 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 		}
 	
 		if (temp->next == NULL) { /*Latest in sequence, put at end of list */
-			temp->next = malloc(sizeof(struct node));
-			temp->next->data = malloc(sizeof(struct chat_packet));
-			temp->next->likes = malloc(sizeof(struct likes));
+			temp->next = (struct node *)calloc(1,sizeof(struct node));
+			temp->next->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
+			temp->next->likes = (struct likes *)calloc(1,sizeof(struct likes));
 			temp->next->exists = 1;
 			memcpy(temp->next->data, c, sizeof(struct chat_packet));
 			/* For sending below, set temp->next, since it is null */
@@ -565,12 +565,12 @@ void recv_join_msg(struct chat_packet *c) {
 	struct names *n;
 	char namelist[80];
 	r = find_room(groupname);
- 	 printf("bpoint here\n");
         add_user(c->name, c->client_group, r->names, atoi(server));
  	/*Let other servers know the username was added */
         c->type = 10;
         bzero(c->group, MAX_GROUP_NAME);
 	strncpy(c->group, groupname, strlen(groupname)); /*Remove serverid from group */
+	c->server_id = atoi(server);
         ret = SP_multicast(Mbox, AGREED_MESS, "Servers", 3, sizeof(struct chat_packet), (const char *) c);
 	
         i = r->head;
@@ -639,17 +639,26 @@ void filter_userlist(char *server) {
 			p = n->next->pnames;
 
 			while (p->next != NULL) {
+				printf("Looking for server %d found Server=%d\n", server_id, p->next->server_id);
 				if (p->next->server_id == server_id) {
+					printf("Removing %s\n", p->next->pname);
 					p->next = p->next->next;
 				}
- 			  p = p->next;
+				else {
+	 			  p = p->next;
+				}
 			}
 
-			if (n->next->pnames->next == NULL) {
+			if (n->next->pnames->next == NULL && n->next != NULL) { /*remove if not last in list */
+				printf("Removing %s\n", n->next->name);
 				n->next = n->next->next;
 			  
 			}
-		   n = n->next;
+			else if (n->next->pnames->next == NULL && n->next == NULL) { /*Last in list, so just null next */
+				printf("Removing last name in list %s\n", n->next->name);
+				n->next = NULL;
+ 			}
+		   if (n->next != NULL) n = n->next; /*due to last case, we may have already set n-next = null*/
 		}
 	     r = r->next;
 	}
@@ -663,7 +672,7 @@ void send_namelist(char *group, struct names *names)
   struct names *n;
   n=names;
   int ret;
-  c = malloc(sizeof(struct chat_packet));
+  c = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
   
         bzero(namelist, 80);
         while (n->next != NULL) /*Build membership group name list */
@@ -791,7 +800,7 @@ void recv_update(int rvector[][6]) {
 	     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d ", min);
 	     for (j=1; j<6; j++)
 	     {
-	       if (servers_online[i]) /* Only calculate vectors from servers that are online */	
+	       if (servers_online[j]) /* Only calculate vectors from servers that are online */	
 	       {
  	         if (vector[j][i] > max)
 	  	  {
@@ -834,7 +843,7 @@ void write_data() {
 void send_remove(char *pname, char *group)
 {
   struct chat_packet *c;
-  c = malloc(sizeof(struct chat_packet));
+  c = (struct chat_packet *)calloc(1, sizeof(struct chat_packet));
   c->type=11;
   strncpy(c->client_group, pname, strlen(pname));
   strncpy(c->group, group, strlen(group));
@@ -1048,7 +1057,7 @@ void main(int argc, char **argv)
   char group[80];
   char messages[5];
   struct node first_node; // Sentinel node used for read_disk()
-  chatroomhead = malloc(sizeof(struct chatrooms));
+  chatroomhead = (struct chatrooms *) calloc(1, sizeof(struct chatrooms));
   sp_time test_timeout;
   test_timeout.sec = 5;
   test_timeout.usec = 0;
@@ -1130,13 +1139,13 @@ struct chatrooms * create_room(char *room_name, struct chatrooms *rooms_tail) {
 	char groupname[MAX_GROUP_NAME];
 	bzero(groupname, MAX_GROUP_NAME);
 	int ret;
-	rooms_tail->next = malloc(sizeof(struct chatrooms));
+	rooms_tail->next = (struct chatrooms *) calloc(1, sizeof(struct chatrooms));
 	rooms_tail = rooms_tail->next;
-	rooms_tail->head =  malloc(sizeof(struct node));
-	rooms_tail->head->next = NULL;
+	rooms_tail->head =  (struct node *) calloc(1,sizeof(struct node));
+	//rooms_tail->head->next = NULL; we shouldn't need this since we changed to calloc
 	rooms_tail->tail = rooms_tail->head;
-	rooms_tail->names = malloc(sizeof(struct names));
-        rooms_tail->names->pnames = malloc(sizeof(struct pnames));
+	rooms_tail->names = (struct names *)calloc(1, sizeof(struct names));
+        rooms_tail->names->pnames = (struct pnames *)calloc(1,sizeof(struct pnames));
 	bzero(rooms_tail->name, MAX_GROUP_NAME);
 	strncpy(rooms_tail->name, room_name, strlen(room_name));
 	sprintf(groupname, "%s%d", room_name, atoi(server));
@@ -1181,9 +1190,9 @@ struct node * find_insert_slot(int target_stamp, struct chatrooms *room) {
 
 /* Creates an empty node used for chatrooms. */
 struct node * empty_chatroom_node() {
-	struct node *temp = malloc(sizeof(struct node));
-	temp->data = malloc(sizeof(struct chat_packet));
-	temp->likes = malloc(sizeof(struct likes));
+	struct node *temp = (struct node *)calloc(1, sizeof(struct node));
+	temp->data = (struct chat_packet *) calloc(1,sizeof(struct chat_packet));
+	temp->likes = (struct likes *) calloc(1,sizeof(struct likes));
 	temp->exists = 0;
 
 	return temp;
@@ -1225,10 +1234,10 @@ struct node * chatroom_insert_msg(struct chat_packet *msg) {
 /* Array linked list insert for a chat_packet */
 void array_ll_insert(struct chat_packet *msg, int server) {
 	// Set up the new node.
-	Last_packets[server]->next = malloc(sizeof(struct node));
+	Last_packets[server]->next = (struct node *)calloc(1,sizeof(struct node));
 	Last_packets[server] = Last_packets[server]->next;
-	Last_packets[server]->data = malloc(sizeof(struct chat_packet));
-	Last_packets[server]->likes = malloc(sizeof(struct likes));
+	Last_packets[server]->data = (struct chat_packet *)calloc(1,sizeof(struct chat_packet));
+	Last_packets[server]->likes = (struct likes *)calloc(1,sizeof(struct likes));
 
 	// Copy chat_packet into the new node.
 	memcpy(Last_packets[server]->data, msg, sizeof(struct chat_packet));
@@ -1264,7 +1273,7 @@ struct likes * find_user_like(char *username, struct likes *head) {
 		temp = temp->next;
 	}
 
-	temp->next = malloc(sizeof(struct likes));
+	temp->next = (struct likes *)calloc(1, sizeof(struct likes));
 	strncpy(temp->next->name, username, strlen(username) + 1);
 	return temp->next;
 }
