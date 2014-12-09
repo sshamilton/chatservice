@@ -28,14 +28,17 @@ void show_menu()
 	printf("\tc <server> -- Join Server\n");
 	printf("\tu <name> -- Set Username\n");
 	printf("\n");
+	if (connected > 0) {
 	printf("\tj <room> -- join chatroom\n");
         printf("\ta <text> -- append line/send message\n");
 	printf("\tl <line number> -- like message\n");
         printf("\tr <line number> -- remove like from message\n");
 	printf("\th Print History\n");
 	printf("\tv View Chat Servers Available\n");
+	}
 	printf("\t? Display this menu\n");
 	printf("\n");
+	
 	printf("\tq -- quit\n");
         printf("> ");
 	fflush(stdout);
@@ -316,12 +319,15 @@ static	void	User_command()
 	{
 		case 'j':
 			ret = sscanf( &command[2], "%s", group );
-			if( ret < 1 ) 
-			{
+			if (connected > 0) {
+ 			   if( ret < 1 ) 
+			   {
 				printf(" invalid chatroom \n> ");
 				break;
+			  } 
+			  join_room(group);
 			}
-			join_room(group);
+			else {printf("You must connect to a server first\n>"); }
 			break;
                 case 'c':
 			ret = sscanf( &command[2], "%s", group );
@@ -340,14 +346,15 @@ static	void	User_command()
 			show_menu();
 			break;
    		case 'u':
-			ret = sscanf( &command[2], "%s", username);
-			if( ret < 1 )
-			{
+			if (connected > 0 ) {
+			  ret = sscanf( &command[2], "%s", username);
+			  if( ret < 1 )
+			  {
 				printf(" Invalid Username\n> ");
 				break;
-			}
-			else
-			{
+			  }
+			  else
+			  {
 				printf("Username set to %s\n> ", username);
 				/*If in chatroom, disconnect */
 				if (strlen(chatroom) > 0)
@@ -356,41 +363,63 @@ static	void	User_command()
         				printf("leaving chatroom, %s due to username change\n", chatroom);
         				SP_leave(Mbox, chatroom);
   				} 
+			  }
 			}
+			else {printf("You must connect to a server first\n>"); }
+
 			break;
  		case 'a':
-			strncpy(mtext, &command[2], 130);
-			if( strlen(mtext) < 1)
-			{
+			if (connected > 0) {
+			  strncpy(mtext, &command[2], 130);
+			  if( strlen(mtext) < 1)
+			  {
 				printf(" invalid message\n> ");
 				break;
+			  }
+			  send_msg(mtext);
 			}
-			send_msg(mtext);
+
+			else {printf("You must connect to a server first\n>"); }
+
 			break;
 		case 'l':
-			ret = sscanf( &command[2], "%d", &like  );
-                        if( ret < 1)
-                        {
+			if (connected > 0) {
+			  ret = sscanf( &command[2], "%d", &like  );
+                          if( ret < 1)
+                          {
                                 printf(" invalid line\n> ");
                                 break;
-                        }
-                        like_msg(like, 1);
+                          }
+                          like_msg(like, 1);
+			}
+			else {printf("You must connect to a server first\n>"); }
+
 			break;
 		case 'r':
-			ret = sscanf( &command[2], "%d", &like);
-			if (ret < 1)
-			{
+			if (connected > 0) {
+			  ret = sscanf( &command[2], "%d", &like);
+			  if (ret < 1)
+			  {
 				printf(" invalid line\n> ");
 				break;
+			  }
+			  like_msg(like, 0);
 			}
-			like_msg(like, 0);
+			else {printf("You must connect to a server first\n>"); }
+
 			break;
 		case 'h':
-			print_history();
-    			printf("> ");
+			if (strlen(chatroom) != 0) {
+			   print_history();
+    			   printf("> ");
+			}
+			else printf("You are not in a chatroom.\n>");
 			break;
 		case 'v':
-			show_servers();
+			if (connected > 0) {
+				show_servers();
+			}
+			else {printf("You must connect to a server first\n>"); }
 			break;
 		default: 
 			printf("> ");
@@ -597,11 +626,13 @@ if (ret < 0 )
 			    {
 				printf("Successfully connected to server %d\n>", connected);
 				success = 1;
+				show_menu();
 			    }
 			  }
 			  if (!success)
 			  {
 				printf("Server unavailable.  Please try again later.\n>");
+				connected = 0;
 				SP_leave(Mbox, sender);
 			  }
 			}
