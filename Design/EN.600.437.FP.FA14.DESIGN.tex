@@ -192,7 +192,25 @@ Initially these timestamps are zero.  As clients join servers, they create messa
 When a server crashes and is restarted, it begins by reading from the log file.  As it reads, it updates its matrix of LTS timestamps.  When complete, it joins the server group, which triggers all servers to send their matrix.  It will immediately receive updates for all the message it does not have from the server that has the highest LTS of messages in the matrix for each server.  It will process these updates, and if any clients connect during this time, they will be given the updates as well by the group they are connected to for their chatroom.
 
 \subsubsection{Reconciliation Case}
-Each time a membership change operation occurs in the server group, each server begins a reconciliation process.  If a server leaves the group, each server begins removing all users from the chatroom data structure for that server.  Then an update is sent to the client of only those affected chatrooms with the new membership list of the rooms.  Therefore every user will know that the users that were on the server that went down are no longer reachable.  \\When a server joins the server group, this triggers each server to send their matrix of latest LTS timestamps for each message they now about.  Since the membership change contains how many servers are in the group, each server will wait for the correct number of matrices from each other server before sending any updates.  Once they are all received, each server computes the minimum and maximum LTS for each server.  If the server finds that their server ID contains the maximum, it will send all messages after the minimum LTS (regardless if they are the owner of the messages).  Servers will disregard any message it receives if it has a lower LTS than what is received.  Therefore, each server will now have the latest messages after the join operation.  \\
+Each time a membership change operation occurs in the server group, each
+server begins a reconciliation process.  If a server leaves the group, each
+server begins removing all users from the chatroom data structure for that
+server.  Then an update is sent to the client of only those affected
+chatrooms with the new membership list of the rooms.  Therefore every user
+will know that the users that were on the server that went down are no
+longer reachable.  \\When a server joins the server group, this triggers
+each server to send their matrix of latest LTS timestamps for each message
+they now about.  Since the membership change contains how many servers are
+in the group, each server will wait for the correct number of matrices from
+each other server before sending any updates. Furthermore, the receiving
+servers will filter through the received matrices. This is done by keeping
+an array of received matrices and marking ones already received for a given
+merge.  This is done because of potential duplicate matrices being sent
+after subsequent merges. If there are two merges in a row to a single
+group, then the servers in the original group will end up sending their
+matrices twice. They may receive each other's more than once and if we
+solely rely on the number of matrices received, then we may end up
+neglecting some servers that joined in the second merge.  Once they are all received, each server computes the minimum and maximum LTS for each server.  If the server finds that their server ID contains the maximum, it will send all messages after the minimum LTS (regardless if they are the owner of the messages).  Servers will disregard any message it receives if it has a lower LTS than what is received.  Therefore, each server will now have the latest messages after the join operation.  \\
 As each of these update message arrive at the server, they are placed in the server array/linked list structure in order, and in the chatroom linked list by LTS order.  In addition, each packet is also sent to the chatroom group on that server that it belongs to.  This allows each client to receive the message, and place it in its data structure in LTS order.  Once this occurs, it will refresh the screen to display that message and all after it, to inform the user of the changed messages and/or likes.\\
 In the case that a message is liked, but the message that was liked was not yet received by the server, the server will create a message that is marked as not received, and the like is attached to that message.  This placeholder message will not be displayed until it is marked received.  Once this occurs, the like will be on that message.  This creates eventual consistency, since likes refer to messages that potentially may not be received due to partitioning.
 \end{document}
