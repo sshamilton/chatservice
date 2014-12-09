@@ -178,15 +178,15 @@ void refresh_display()
   {
     if (i->next->data->num_likes > 0)
     {
-      printf("%d. %s: %-80s Likes %d\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
+      printf("%d. %-15s: %-80s Likes %d\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
     }
     else 
     {
-      printf("%d. %s: %s\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
+      printf("%d. %-15s: %s\n",  i->next->sequence, i->next->data->name, i->next->data->text, i->next->data->num_likes);
     }
    i = i->next;
   }
-  printf("\n>");
+  printf("\n%s>", username);
 }
 
 void join_room(char *group)
@@ -212,8 +212,8 @@ void join_room(char *group)
   /*Disjoin from current group */
   if (strlen(chatroom) > 0)
   {
-	sprintf(chatroom, "%s%d",chatroom, connected);
 	printf("leaving chatroom, %s\n", chatroom);
+	sprintf(chatroom, "%s%d",chatroom, connected);
 	SP_leave(Mbox, chatroom);
   }
   //printf("chatroom length = %d\n", strlen(chatroom));
@@ -418,7 +418,12 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	/* We need to put the merged chats in the correct order */
 	while (temp->next != NULL) {
 	  temp->next->sequence = count;/* for resequencing*/
-	  if (c->sequence < temp->next->data->sequence)
+	  if (c->sequence == temp->next->data->sequence)
+	  {
+	     /*already received this LTS, so don't add it. */
+	     break;
+          }
+	  else if (c->sequence < temp->next->data->sequence)
 	  {
 	     temp2 = temp->next;
              temp->next = (struct node *)calloc(1,sizeof(struct node));
@@ -426,6 +431,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
              memcpy(temp->next->data, c, sizeof(struct chat_packet));
 	     temp->next->sequence = count;
 	     temp->next->previous = temp; /*Double link list added for traversal on 25 chat lines */ 
+	     temp2->previous = temp->next;
 	     temp->next->next = temp2;
 	     break;
 	  }
@@ -440,7 +446,8 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type) {
 	   temp->next->sequence = count;
 	   temp->next->previous = temp; /*Double link list added for traversal on 25 chat lines */
            temp->next->next = temp2;
-	   chatroom_latest = temp->next; /*set latest to this new packet */ 
+	   chatroom_latest = temp->next; /*set latest to this new packet */
+	    
 	}
 	/*Renumber */
 	temp = chatroom_start;
