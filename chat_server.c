@@ -19,6 +19,8 @@ static	struct			chatrooms* chatroomhead;
 static  int				servers_available = 0;
 static  int				vectors_received = 0;
 static  int				servers_online[6];
+static  int				servers_vect_rec[6];
+
 void read_disk();
 void send_vector();
 void recv_client_msg();
@@ -469,6 +471,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 	   sprintf(groupname, "%s%d", c->group, atoi(server));
 	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
+	   return;
         }
         /* Recieved user leave from other server */
         else if (c->type == 11) {
@@ -479,6 +482,7 @@ void recv_server_msg(struct chat_packet *c, int16 mess_type){
 	   sprintf(groupname, "%s%d\0", c->group, atoi(server));
 	 if (r->names == NULL)    printf("Rnames is null!\n");
 	   send_namelist(groupname, r->names);
+	   return;
         }
         printf("Received text: %s\n", c->text);
    	/* Check to make sure we don't already have it */
@@ -688,7 +692,7 @@ void send_namelist(char *group, struct names *names)
         c->type = 9;
 	strncpy(c->group, group, strlen(group));
         ret = SP_multicast(Mbox, AGREED_MESS, group, 3, sizeof(struct chat_packet), (const char *) (c));
-
+	
         printf("Sent names in chatroom: %s to group %s with return %d\n", c->text, group, ret);
 
 }
@@ -781,8 +785,17 @@ void recv_update(int rvector[][6]) {
 	showmatrix((int(*) [6]) rvector);
 	
 	/*Determine if we have recevied all the updates */
-	vectors_received++;
 	printf("Comparing vrec %d with serv-avail %d\n", vectors_received, servers_available-1);
+	/* Count those that sent a vector */
+	vectors_received = 0;
+	for (i=0; i<6; i++)
+	{
+		if (servers_vect_rec[i]){
+		  printf("Got vector from %d, have %d need %d\n", i, vectors_received + 1, servers_available);
+		  vectors_received++; /*Only count it if we have all unique vectors from others */
+		}
+		
+	}
 	if (vectors_received == servers_available -1) /*We got all the updates */
 	{
 	   /*Reset vector count */
@@ -794,8 +807,6 @@ void recv_update(int rvector[][6]) {
 	
 	   for (i = 1; i<6; i++)
 	   {
-	   if (servers_online[i]) /* Only calculate vectors from servers that are online */
-           {
 	     max=0;
 	     min=vector[1][i]; /*Set min to first value */ printf("Min set to %d ", min);
 	     for (j=1; j<6; j++)
@@ -814,9 +825,8 @@ void recv_update(int rvector[][6]) {
 		   s = j; /* Server who needs it */
 	          }
  	       }
-	     }
 	    }
-	     if (c == atoi(server)  && servers_online[i] && min < max) /*We have the latest, so send all after min LTS */
+	     if (c == atoi(server) && min < max) /*We have the latest, so send all after min LTS */
 	     {
 		send_all_after(min, i);printf("Sent all after %d for server %d\n", min, s);
 	     }
@@ -927,6 +937,7 @@ if (ret < 0 )
 			  printf("Received message from another server: sender:%c our server:%c\n", sender[1], server[0]);
 			  if (mess_type == 10) /*Vector update */
 			  {
+				servers_vect_rec[atoi(&sender[1])] = 1; /*Mark that we received a vector from this sender */
 				recv_update((int(*) [6]) mess);
 			  }
 			  else /* Membership change mode when mess_type is 5 */
@@ -960,7 +971,12 @@ if     ( Is_reg_memb_mess( service_type ) )
                                 /*Update servers online*/
                                 printf("Serv online...numgrp=%d\n", num_groups);
 				/* Zero out server array */
-				for (i=1;i < 6; i++) servers_online[i] = 0;
+				for (i=1;i < 6; i++) 
+				{
+					servers_online[i] = 0;
+					servers_vect_rec[i] = 0;
+				}
+				
 				/* Update those online */
                                 for (i=0; i < num_groups; i++)
                                 {  printf("Server %c online\n", target_groups[i][1] );
@@ -982,6 +998,7 @@ if     ( Is_reg_memb_mess( service_type ) )
 					  }
 					}
 				 	 /*Let client know. */
+					update_userlist();
 					send_allnames();
 				}
                             }
@@ -1184,9 +1201,13 @@ struct chatrooms * find_room(char *room_name) {
 }
 
 void send_allnames() {
-   struct chatrooms *temp = chatroomhead;
+   struct chatrooms *temp;
+   temp = chatroomhead;
+   char group[MAX_GROUP_NAME];
    while (temp->next != NULL) {
-      send_namelist(temp->next->name, temp->next->names);
+      bzero(group, MAX_GROUP_NAME);
+      sprintf(group, "%s%d", temp->next->name, atoi(server));
+      send_namelist(group, temp->next->names);
      temp = temp->next;
    }
 }
@@ -1234,12 +1255,13 @@ struct node * chatroom_insert_msg(struct chat_packet *msg) {
 
 	// Insert the new message
 	slot = find_insert_slot(msg->sequence, room);
-	if (slot->next != NULL && slot->next->sequence == msg->sequence) {
-		printf("An error occured inserting a message into the chatroom data structure\n");
-		return NULL;
+	if (slot->next != NULL && slot->next->data->sequence == msg->sequence && slot->next->exists == 0) {
+		memcpy(slot->next->data, msg, sizeof(struct chat_packet));
+		slot->next->exists = 1;
+		return slot->next;
 	}
 
-	if (slot->next == NULL || msg->sequence < slot->next->sequence) {
+	if (slot->next == NULL || msg->sequence < slot->next->data->sequence) {
 		temp = slot->next;
 		slot->next = empty_chatroom_node();
 		slot->next->next = temp;
